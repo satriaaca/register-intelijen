@@ -1,0 +1,183 @@
+name: Weekly Neon PostgreSQL Backup to Google Drive
+
+on:
+  schedule:
+    # Sabtu 17:00 UTC = Minggu 01:00 WITA
+    - cron: "0 17 * * 6"
+
+  # Bisa dijalankan manual dari GitHub Actions.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: neon-google-drive-weekly-backup
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    name: Backup Neon to Google Drive
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    env:
+      DATABASE_URL: ${{ secrets.NEON_BACKUP_DATABASE_URL }}
+      GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+      GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+      GOOGLE_REFRESH_TOKEN: ${{ secrets.GOOGLE_REFRESH_TOKEN }}
+      GOOGLE_DRIVE_FOLDER_ID: ${{ secrets.GOOGLE_DRIVE_FOLDER_ID }}
+
+    steps:
+      - name: Install PostgreSQL 18 client
+        run: |
+          set -euo pipefail
+
+          sudo apt-get update
+          sudo apt-get install -y ca-certificates curl lsb-release
+
+          sudo install -d /usr/share/postgresql-common/pgdg
+
+          sudo curl --fail --location \
+            --output /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
+            https://www.postgresql.org/media/keys/ACCC4CF8.asc
+
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
+            | sudo tee /etc/apt/sources.list.d/pgdg.list > /dev/null
+
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client-18
+
+          /usr/lib/postgresql/18/bin/pg_dump --version
+          /usr/lib/postgresql/18/bin/psql --version
+
+      - name: Validate configuration
+        run: |
+          set -euo pipefail
+
+          test -n "$DATABASE_URL"
+          test -n "$GOOGLE_CLIENT_ID"
+          test -n "$GOOGLE_CLIENT_SECRET"
+          test -n "$GOOGLE_REFRESH_TOKEN"
+          test -n "$GOOGLE_DRIVE_FOLDER_ID"
+
+      - name: Test Neon database connection
+        run: |
+          set -euo pipefail
+
+          /usr/lib/postgresql/18/bin/psql "$DATABASE_URL" \
+            --no-psqlrc \
+            --set ON_ERROR_STOP=1 \
+            --command "SELECT current_database(), now();"
+
+      - name: Create PostgreSQL backup
+        id: backup
+        run: |
+          set -euo pipefail
+
+          TIMESTAMP="$(date -u +%Y-%m-%dT%H-%M-%SZ)"
+          BACKUP_DIR="$RUNNER_TEMP/backups"
+          BACKUP_BASENAME="register-intel-${TIMESTAMP}.dump"
+          BACKUP_PATH="${BACKUP_DIR}/${BACKUP_BASENAME}"
+
+          mkdir -p "$BACKUP_DIR"
+
+          /usr/lib/postgresql/18/bin/pg_dump \
+            --dbname="$DATABASE_URL" \
+            --format=custom \
+            --compress=9 \
+            --no-owner \
+            --no-privileges \
+            --file="$BACKUP_PATH"
+
+          test -s "$BACKUP_PATH"
+
+          sha256sum "$BACKUP_PATH" > "${BACKUP_PATH}.sha256"
+
+          echo "backup_file=$BACKUP_PATH" >> "$GITHUB_OUTPUT"
+          echo "checksum_file=${BACKUP_PATH}.sha256" >> "$GITHUB_OUTPUT"
+          echo "backup_name=$(basename "$BACKUP_PATH")" >> "$GITHUB_OUTPUT"
+
+      - name: Install Google Drive library
+        run: |
+          set -euo pipefail
+
+          NPM_WORKDIR="$RUNNER_TEMP/google-drive-uploader"
+
+          mkdir -p "$NPM_WORKDIR"
+          cd "$NPM_WORKDIR"
+
+          npm init -y
+          npm install --no-save googleapis@latest
+
+      - name: Upload backup to Google Drive
+        env:
+          BACKUP_FILE: ${{ steps.backup.outputs.backup_file }}
+          CHECKSUM_FILE: ${{ steps.backup.outputs.checksum_file }}
+        run: |
+          set -euo pipefail
+
+          UPLOADER_DIR="$RUNNER_TEMP/google-drive-uploader"
+          SCRIPT_PATH="$UPLOADER_DIR/upload-to-google-drive.mjs"
+
+          cat > "$SCRIPT_PATH" <<'NODE'
+          import fs from "node:fs";
+          import path from "node:path";
+          import { google } from "googleapis";
+
+          const oauth2Client = new google.auth.OAuth2(
+            process.env.GOOGLE_CLIENT_ID,
+            process.env.GOOGLE_CLIENT_SECRET,
+          );
+
+          oauth2Client.setCredentials({
+            refresh_token: process.env.GOOGLE_REFRESH_TOKEN,
+          });
+
+          const drive = google.drive({
+            version: "v3",
+            auth: oauth2Client,
+          });
+
+          async function uploadFile(filePath) {
+            const response = await drive.files.create({
+              requestBody: {
+                name: path.basename(filePath),
+                parents: [process.env.GOOGLE_DRIVE_FOLDER_ID],
+              },
+              media: {
+                mimeType: "application/octet-stream",
+                body: fs.createReadStream(filePath),
+              },
+              fields: "id,name,size,createdTime,webViewLink",
+            });
+
+            console.log(
+              `Uploaded: ${response.data.name} (${response.data.id})`,
+            );
+          }
+
+          await uploadFile(process.env.BACKUP_FILE);
+          await uploadFile(process.env.CHECKSUM_FILE);
+          NODE
+
+          node "$SCRIPT_PATH"
+
+      - name: Backup summary
+        if: success()
+        run: |
+          {
+            echo "## Backup Neon ke Google Drive berhasil"
+            echo
+            echo "- File: \`${{ steps.backup.outputs.backup_name }}\`"
+            echo "- Format: PostgreSQL custom dump (pg_dump 18)"
+            echo "- Kompresi: level 9"
+            echo "- SHA-256 checksum: dibuat dan diunggah"
+            echo "- Waktu: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Clean temporary files
+        if: always()
+        run: |
+          rm -rf "$RUNNER_TEMP/backups"
+          rm -rf "$RUNNER_TEMP/google-drive-uploader"

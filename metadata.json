@@ -1,0 +1,6 @@
+{
+  "name": "Aplikasi Register Intelijen Kejaksaan",
+  "description": "Sistem informasi register dan generator dokumen PDF register intelijen Kejaksaan RI (R.IN.1 hingga R.IN.23) dengan dukungan database PostgreSQL (Neon), register bulanan dengan tanggal penutupan per bulan yang dapat disesuaikan, pemilihan petugas pelaksana, dan tanda tangan resmi.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
