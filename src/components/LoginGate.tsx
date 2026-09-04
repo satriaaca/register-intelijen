@@ -114,7 +114,7 @@ export default function LoginGate() {
 
                 <div className="mt-4 flex items-center justify-center gap-2 text-center text-[11px] text-slate-500">
                     <span className="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
-                    <span>Hanya email terdaftar pada Whitelist</span>
+                    <span>Satya Adhi Wicaksana</span>
                 </div>
             </section>
         </main>
