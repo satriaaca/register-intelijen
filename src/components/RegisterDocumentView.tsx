@@ -322,16 +322,26 @@ export const RegisterDocumentView: React.FC<RegisterDocumentViewProps> = ({
       }
 
       return (
-        <div className="flex flex-wrap gap-1">
-          {value.map((id) => {
+        <div className="flex flex-col gap-1 text-left">
+          {value.map((id, idx) => {
             const officer = officerMap.get(Number(id));
+            const name = officer
+              ? officer.nama
+              : typeof id === "string" && isNaN(Number(id))
+              ? id
+              : `Petugas #${id}`;
 
             return (
               <span
                 key={id}
-                className="inline-flex items-center rounded border border-emerald-300 bg-emerald-50 px-1.5 py-0.5 text-[10px] font-medium text-emerald-900"
+                className="inline-flex items-center gap-1.5 rounded border border-emerald-300 bg-emerald-50 px-1.5 py-0.5 text-[10px] font-medium text-emerald-950"
               >
-                {officer ? officer.nama : `Petugas #${id}`}
+                {value.length > 1 && (
+                  <span className="flex h-3.5 w-3.5 items-center justify-center rounded-full bg-emerald-700 text-[9px] font-bold text-white shrink-0">
+                    {idx + 1}
+                  </span>
+                )}
+                <span>{name}</span>
               </span>
             );
           })}
@@ -761,9 +771,19 @@ export const RegisterDocumentView: React.FC<RegisterDocumentViewProps> = ({
             id="btn-add-entry-row"
             type="button"
             onClick={handleOpenNew}
-            className="inline-flex cursor-pointer items-center gap-1.5 rounded bg-emerald-700 px-3 py-1.5 text-xs font-bold text-white shadow-sm transition hover:bg-emerald-800"
+            disabled={Boolean(currentLock?.isLocked)}
+            title={
+              currentLock?.isLocked
+                ? "Register terkunci (Tutup Buku). Dokumen tidak dapat ditambah baris baru."
+                : "Tambah baris data baru"
+            }
+            className={`inline-flex items-center gap-1.5 rounded px-3 py-1.5 text-xs font-bold shadow-sm transition ${
+              currentLock?.isLocked
+                ? "cursor-not-allowed bg-slate-200 text-slate-400 border border-slate-300"
+                : "cursor-pointer bg-emerald-700 text-white hover:bg-emerald-800"
+            }`}
           >
-            <Plus className="h-3.5 w-3.5" />
+            {currentLock?.isLocked ? <Lock className="h-3.5 w-3.5 text-slate-400" /> : <Plus className="h-3.5 w-3.5" />}
             <span>Tambah Baris</span>
           </button>
 
@@ -786,7 +806,7 @@ export const RegisterDocumentView: React.FC<RegisterDocumentViewProps> = ({
             onClick={() => setIsLockModalOpen(true)}
             title={
               currentLock?.isLocked
-                ? "Register terkunci. Data penandatangan tidak akan berubah walaupun setting global diubah."
+                ? "Register terkunci. Seluruh data entri dan penandatangan dibekukan."
                 : "Kunci data penandatangan untuk periode ini agar tidak berubah bila setting di masa depan diganti."
             }
             className={`inline-flex cursor-pointer items-center gap-1.5 rounded border px-2.5 py-1.5 text-xs font-bold shadow-sm transition ${
@@ -798,7 +818,7 @@ export const RegisterDocumentView: React.FC<RegisterDocumentViewProps> = ({
             {currentLock?.isLocked ? (
               <>
                 <Lock className="h-3.5 w-3.5 text-amber-700 shrink-0" />
-                <span>Penandatangan Terkunci</span>
+                <span>Status: Terkunci</span>
               </>
             ) : (
               <>
@@ -812,7 +832,17 @@ export const RegisterDocumentView: React.FC<RegisterDocumentViewProps> = ({
             id="btn-import-csv"
             type="button"
             onClick={() => setIsImportCsvOpen(true)}
-            className="inline-flex cursor-pointer items-center gap-1.5 rounded border border-emerald-300 bg-emerald-50 px-2.5 py-1.5 text-xs font-semibold text-emerald-800 shadow-sm transition hover:bg-emerald-100"
+            disabled={Boolean(currentLock?.isLocked)}
+            title={
+              currentLock?.isLocked
+                ? "Register terkunci. Impor CSV dinonaktifkan."
+                : "Impor CSV"
+            }
+            className={`inline-flex items-center gap-1.5 rounded border px-2.5 py-1.5 text-xs font-semibold shadow-sm transition ${
+              currentLock?.isLocked
+                ? "cursor-not-allowed bg-slate-100 text-slate-400 border-slate-200"
+                : "cursor-pointer border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
+            }`}
           >
             <Upload className="h-3.5 w-3.5 text-emerald-700" />
             <span>Impor CSV</span>
@@ -838,7 +868,7 @@ export const RegisterDocumentView: React.FC<RegisterDocumentViewProps> = ({
             <span>Unduh PDF Periode</span>
           </button>
 
-          {selectedEntryIds.length > 0 && (
+          {selectedEntryIds.length > 0 && !currentLock?.isLocked && (
             <button
               id="btn-multi-delete-toolbar"
               type="button"

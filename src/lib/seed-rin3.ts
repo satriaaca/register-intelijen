@@ -1,10 +1,18 @@
 import { parseCsv, transformCsvToRIn3 } from "./csv-importer.js";
 import { SAMPLE_RIN3_CSV } from "./sample-data.js";
-import { importRegisterEntriesBatch, getRegisterEntries } from "../db/queries.js";
+import { importRegisterEntriesBatch } from "../db/queries.js";
+import { db } from "../db/index.js";
+import { registerEntries } from "../db/schema.js";
+import { eq } from "drizzle-orm";
 
 export async function ensureRIn3DataSeeded() {
   try {
-    const existing = await getRegisterEntries("R.IN.3");
+    const existing = await db
+      .select({ id: registerEntries.id })
+      .from(registerEntries)
+      .where(eq(registerEntries.registerCode, "R.IN.3"))
+      .limit(1);
+
     if (existing.length === 0) {
       console.log("Seeding 124 initial R.IN.3 records from user CSV...");
       const rawRows = parseCsv(SAMPLE_RIN3_CSV);

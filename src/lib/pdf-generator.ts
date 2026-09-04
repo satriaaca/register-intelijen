@@ -118,7 +118,9 @@ export function generateRegisterPdf(options: GeneratePdfOptions): jsPDF {
           return off ? `${off.nama} (${off.pangkat} / NIP. ${off.nip})` : null;
         })
         .filter(Boolean);
-      return names.length > 0 ? names.join("\n") : "-";
+      if (names.length === 0) return "-";
+      if (names.length === 1) return names[0];
+      return names.map((name, idx) => `${idx + 1}. ${name}`).join("\n");
     }
     if (typeof ids === "number") {
       const off = officerMap.get(ids);

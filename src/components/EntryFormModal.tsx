@@ -288,19 +288,23 @@ export const EntryFormModal: React.FC<EntryFormModalProps> = ({
           {/* Selected Badges */}
           {selectedIds.length > 0 && (
             <div className="flex flex-wrap gap-1 p-1.5 bg-emerald-50 border border-emerald-200 rounded">
-              {selectedIds.map((id) => {
+              {selectedIds.map((id, sIdx) => {
                 const off = officers.find((o) => o.id === id);
                 if (!off) return null;
                 return (
                   <span
                     key={id}
-                    className="inline-flex items-center gap-1 bg-white border border-emerald-300 text-emerald-900 text-[10px] px-1.5 py-0.5 rounded shadow-2xs"
+                    className="inline-flex items-center gap-1.5 bg-white border border-emerald-300 text-emerald-900 text-[10px] px-1.5 py-0.5 rounded shadow-2xs"
                   >
+                    <span className="flex h-3.5 w-3.5 items-center justify-center rounded-full bg-emerald-700 text-[9px] font-bold text-white shrink-0">
+                      {sIdx + 1}
+                    </span>
                     <span className="font-semibold">{off.nama}</span>
                     <button
                       type="button"
                       onClick={() => handleOfficerToggle(col.key, id)}
-                      className="text-slate-400 hover:text-red-600"
+                      className="text-slate-400 hover:text-red-600 cursor-pointer ml-0.5"
+                      title="Hapus pilihan"
                     >
                       <X className="w-3 h-3" />
                     </button>
@@ -317,7 +321,7 @@ export const EntryFormModal: React.FC<EntryFormModalProps> = ({
                 Tidak ada petugas ditemukan di database. Tambahkan petugas baru di Menu Petugas.
               </p>
             ) : (
-              filteredOfficers.map((off) => {
+              filteredOfficers.map((off, optIdx) => {
                 const isChecked = selectedIds.includes(off.id);
                 return (
                   <label
@@ -332,6 +336,9 @@ export const EntryFormModal: React.FC<EntryFormModalProps> = ({
                       onChange={() => handleOfficerToggle(col.key, off.id)}
                       className="mt-0.5 rounded text-emerald-600 focus:ring-emerald-500"
                     />
+                    <span className="text-[10px] font-mono text-slate-400 w-4 text-right shrink-0 mt-0.5">
+                      {optIdx + 1}.
+                    </span>
                     <div className="leading-tight">
                       <div className="font-bold text-slate-900 text-[11px]">{off.nama}</div>
                       <div className="text-[10px] text-slate-500">

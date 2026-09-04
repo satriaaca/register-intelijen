@@ -28,6 +28,14 @@ import {
   DEFAULT_SETTINGS,
   REGISTER_DEFINITIONS,
 } from "./lib/constants.js";
+import {
+  getCachedSettings,
+  setCachedSettings,
+  getCachedOfficers,
+  setCachedOfficers,
+  getInitialRegisters,
+  setCachedRegisterCounts,
+} from "./lib/cache.js";
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState<AppUser | null>(null);
@@ -41,19 +49,18 @@ export default function App() {
 
   const [registers, setRegisters] = useState<
     (RegisterDefinition & { entryCount?: number })[]
-  >(REGISTER_DEFINITIONS);
+  >(getInitialRegisters);
 
   const [entries, setEntries] = useState<RegisterEntryRow[]>([]);
-  const [officers, setOfficers] = useState<Officer[]>([]);
+  const [officers, setOfficers] = useState<Officer[]>(getCachedOfficers);
 
   // Client-side in-memory cache untuk entri register agar perpindahan register instan (0ms)
   const entriesCacheRef = useRef<Map<string, RegisterEntryRow[]>>(new Map());
 
-  const [settings, setSettings] = useState<AppSettings>(
-    DEFAULT_SETTINGS as AppSettings,
-  );
+  const [settings, setSettings] = useState<AppSettings>(getCachedSettings);
 
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
   const [isSeeding, setIsSeeding] = useState(false);
 
   /*
@@ -79,46 +86,55 @@ export default function App() {
     }, 3500);
   };
 
-  const fetchData = async () => {
+  const fetchData = async (targetCode = selectedCode) => {
     try {
-      setIsLoading(true);
+      setIsSyncing(true);
 
-      const [regResponse, officerResponse, settingsResponse] =
+      const [regResponse, officerResponse, settingsResponse, entriesResponse] =
         await Promise.all([
           authFetch("/api/registers"),
           authFetch("/api/officers"),
           authFetch("/api/settings"),
+          authFetch(`/api/registers/${targetCode}/entries`),
         ]);
 
-      if (!regResponse.ok || !officerResponse.ok || !settingsResponse.ok) {
-        throw new Error("Gagal memuat data dari server.");
+      if (regResponse.ok) {
+        const regData = await regResponse.json();
+        if (regData.registers) {
+          setRegisters(regData.registers);
+        }
+        if (regData.summary?.countsByRegister) {
+          setCachedRegisterCounts(regData.summary.countsByRegister);
+        }
       }
 
-      const [regData, officerData, settingsData] = await Promise.all([
-        regResponse.json(),
-        officerResponse.json(),
-        settingsResponse.json(),
-      ]);
-
-      if (regData.registers) {
-        setRegisters(regData.registers);
+      if (officerResponse.ok) {
+        const officerData = await officerResponse.json();
+        if (Array.isArray(officerData)) {
+          setOfficers(officerData);
+          setCachedOfficers(officerData);
+        }
       }
 
-      if (Array.isArray(officerData)) {
-        setOfficers(officerData);
+      if (settingsResponse.ok) {
+        const settingsData = await settingsResponse.json();
+        if (settingsData?.kejaksaanName) {
+          setSettings(settingsData);
+          setCachedSettings(settingsData);
+        }
       }
 
-      if (settingsData?.kejaksaanName) {
-        setSettings(settingsData);
+      if (entriesResponse.ok) {
+        const entriesData = await entriesResponse.json();
+        if (Array.isArray(entriesData)) {
+          setEntries(entriesData);
+          entriesCacheRef.current.set(targetCode.toLowerCase(), entriesData);
+        }
       }
     } catch (error) {
-      console.error("Error loading application data:", error);
-
-      showNotification(
-        "Gagal memuat data dari database. Pastikan koneksi aktif.",
-        "error",
-      );
+      console.error("Error syncing application data:", error);
     } finally {
+      setIsSyncing(false);
       setIsLoading(false);
     }
   };
@@ -160,15 +176,20 @@ export default function App() {
 
   useEffect(() => {
     if (currentUser) {
-      void fetchData();
+      void fetchData(selectedCode);
     }
   }, [currentUser]);
 
+  const hasInitialMountedRef = useRef(false);
   useEffect(() => {
+    if (!hasInitialMountedRef.current) {
+      hasInitialMountedRef.current = true;
+      return;
+    }
     if (currentUser && selectedCode) {
       void fetchEntries(selectedCode);
     }
-  }, [currentUser, selectedCode]);
+  }, [selectedCode]);
 
   const handleLogout = async () => {
     try {
@@ -465,6 +486,13 @@ export default function App() {
       )}
 
       <main className="mx-auto w-full max-w-7xl flex-1 px-2.5 py-3 sm:px-4 sm:py-4">
+        {isSyncing && (
+          <div className="mb-2 flex items-center justify-end gap-1.5 text-[11px] font-medium text-emerald-800">
+            <Loader2 className="h-3 w-3 animate-spin text-emerald-600" />
+            <span>Menyinkronkan data cloud...</span>
+          </div>
+        )}
+
         {isLoading ? (
           <div className="flex min-h-[50vh] flex-col items-center justify-center gap-2.5 text-slate-500">
             <Loader2 className="h-7 w-7 animate-spin text-emerald-700" />

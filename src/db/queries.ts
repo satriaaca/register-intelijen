@@ -1,6 +1,6 @@
 import { db, createPool } from "./index.js";
 import { officers, registerEntries, registers, settings, storageCodes, registerLocks } from "./schema.js";
-import { eq, desc, asc, and, inArray } from "drizzle-orm";
+import { eq, desc, asc, and, inArray, sql } from "drizzle-orm";
 import { Officer, AppSettings, StorageCodeMapping, RegisterLock, ArchiveYearStats, DatabaseArchiveStats, ArchivePackage } from "../types.js";
 import { DEFAULT_SETTINGS, INITIAL_OFFICERS, REGISTER_DEFINITIONS } from "../lib/constants.js";
 
@@ -90,8 +90,13 @@ export async function ensureTablesExist(): Promise<void> {
         updated_at TIMESTAMP DEFAULT NOW(),
         UNIQUE(register_code, period_key)
       );
+
+      CREATE INDEX IF NOT EXISTS idx_reg_entries_code ON register_entries (register_code);
+      CREATE INDEX IF NOT EXISTS idx_reg_entries_code_urut ON register_entries (register_code, nomor_urut);
+      CREATE INDEX IF NOT EXISTS idx_reg_locks_lookup ON register_locks (register_code, period_key);
+      CREATE INDEX IF NOT EXISTS idx_storage_codes_lookup ON storage_codes (kode);
     `);
-    console.log("Database tables verified/initialized successfully.");
+    console.log("Database tables and indexes verified/initialized successfully.");
   } catch (error) {
     console.warn("Notice: Table auto-creation check (skipping if tables exist or connecting lazily):", error);
   }
@@ -501,18 +506,29 @@ export async function importRegisterEntriesBatch(
 
 export async function getRegistersSummary() {
   try {
-    const officersList = await getOfficers();
-    const allEntries = await db.select().from(registerEntries);
-    
+    const counts = await db
+      .select({
+        registerCode: registerEntries.registerCode,
+        count: sql<number>`count(*)::int`,
+      })
+      .from(registerEntries)
+      .groupBy(registerEntries.registerCode);
+
+    const officersCount = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(officers);
+
     const countMap: Record<string, number> = {};
-    allEntries.forEach((e) => {
-      countMap[e.registerCode] = (countMap[e.registerCode] || 0) + 1;
-    });
+    let totalEntries = 0;
+    for (const row of counts) {
+      countMap[row.registerCode] = row.count;
+      totalEntries += row.count;
+    }
 
     return {
       totalRegisters: REGISTER_DEFINITIONS.length,
-      totalEntries: allEntries.length,
-      totalOfficers: officersList.length,
+      totalEntries,
+      totalOfficers: officersCount[0]?.count || 0,
       countsByRegister: countMap,
     };
   } catch (error) {
@@ -617,7 +633,7 @@ export const INITIAL_STORAGE_CODE_MAPPINGS: Array<{ kode: string; asal: string; 
 
 export async function seedStorageCodesIfEmpty(): Promise<void> {
   try {
-    const existing = await getStorageCodes();
+    const existing = await db.select({ id: storageCodes.id }).from(storageCodes).limit(1);
     if (existing.length === 0) {
       console.log("Seeding initial storage codes mapping...");
       for (const item of INITIAL_STORAGE_CODE_MAPPINGS) {

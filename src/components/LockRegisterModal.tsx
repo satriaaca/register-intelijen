@@ -200,11 +200,17 @@ export const LockRegisterModal: React.FC<LockRegisterModalProps> = ({
               <span>Prinsip Perlindungan Snapshot Kunci Register:</span>
             </div>
             <p className="text-[11px] text-slate-600 leading-relaxed">
-              Ketika register ini <strong>dikunci</strong>, seluruh data pejabat penandatangan di bawah akan dibekukan khusus untuk periode <strong>{periodLabel}</strong>. Jika di masa mendatang data pejabat pada menu <em>Pengaturan Instansi</em> diperbarui, register ini <strong>tidak akan terpengaruh</strong> sampai kunci dibuka kembali.
+              Ketika register ini <strong>dikunci</strong>, seluruh data pejabat penandatangan di bawah akan dibekukan khusus untuk periode <strong>{periodLabel}</strong>. Jika di masa mendatang data pejabat pada menu <em>Pengaturan Instansi</em> atau daftar petugas diperbarui, dokumen register periode ini <strong>tidak dapat diapa-apakan / tidak berubah</strong> sampai kunci dibuka kembali.
             </p>
             {isCurrentlyLocked && currentLock?.lockedAt && (
-              <div className="pt-1 text-[10px] font-semibold text-amber-800 flex items-center gap-1 border-t border-slate-200">
-                <span>🔒 Register telah dikunci pada: {new Date(currentLock.lockedAt).toLocaleString("id-ID")}</span>
+              <div className="mt-2 p-2 rounded bg-amber-100 border border-amber-300 text-amber-950 font-medium text-[11px] flex items-start gap-2">
+                <Lock className="w-4 h-4 text-amber-800 shrink-0 mt-0.5" />
+                <div>
+                  <div className="font-bold">STATUS: DOKUMEN TERKUNCI (READ-ONLY)</div>
+                  <div>
+                    Data penandatangan telah dibekukan pada {new Date(currentLock.lockedAt).toLocaleString("id-ID")}. Kolom data tidak dapat diubah lagi. Untuk mengganti petugas atau tanggal, buka kunci register terlebih dahulu.
+                  </div>
+                </div>
               </div>
             )}
           </div>
@@ -213,7 +219,9 @@ export const LockRegisterModal: React.FC<LockRegisterModalProps> = ({
           <div className="p-3 rounded-lg border border-slate-200 bg-slate-50/70 space-y-2">
             <div className="text-[11px] font-bold text-slate-800 uppercase tracking-wider flex items-center justify-between border-b border-slate-200 pb-1">
               <span>Pejabat Penandatangan Kiri (Mengetahui / Kajari)</span>
-              <span className="text-[10px] text-slate-400 font-normal">Snapshot Tersimpan</span>
+              <span className="text-[10px] text-slate-400 font-normal">
+                {isCurrentlyLocked ? "🔒 Terkunci" : "Snapshot Tersimpan"}
+              </span>
             </div>
             <div className="space-y-2">
               <div>
@@ -222,8 +230,13 @@ export const LockRegisterModal: React.FC<LockRegisterModalProps> = ({
                   type="text"
                   value={leftSignerTitle}
                   onChange={(e) => setLeftSignerTitle(e.target.value)}
+                  disabled={Boolean(isCurrentlyLocked)}
                   required
-                  className="w-full px-2.5 py-1.5 text-xs bg-white border border-slate-300 rounded focus:ring-1 focus:ring-emerald-600"
+                  className={`w-full px-2.5 py-1.5 text-xs rounded border transition ${
+                    isCurrentlyLocked
+                      ? "bg-slate-100 text-slate-600 border-slate-300 cursor-not-allowed select-none"
+                      : "bg-white border-slate-300 focus:ring-1 focus:ring-emerald-600"
+                  }`}
                 />
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -233,8 +246,13 @@ export const LockRegisterModal: React.FC<LockRegisterModalProps> = ({
                     type="text"
                     value={leftSignerName}
                     onChange={(e) => setLeftSignerName(e.target.value)}
+                    disabled={Boolean(isCurrentlyLocked)}
                     required
-                    className="w-full px-2.5 py-1.5 text-xs font-semibold bg-white border border-slate-300 rounded focus:ring-1 focus:ring-emerald-600"
+                    className={`w-full px-2.5 py-1.5 text-xs font-semibold rounded border transition ${
+                      isCurrentlyLocked
+                        ? "bg-slate-100 text-slate-600 border-slate-300 cursor-not-allowed select-none"
+                        : "bg-white border-slate-300 focus:ring-1 focus:ring-emerald-600"
+                    }`}
                   />
                 </div>
                 <div>
@@ -243,8 +261,13 @@ export const LockRegisterModal: React.FC<LockRegisterModalProps> = ({
                     type="text"
                     value={leftSignerPangkatNip}
                     onChange={(e) => setLeftSignerPangkatNip(e.target.value)}
+                    disabled={Boolean(isCurrentlyLocked)}
                     required
-                    className="w-full px-2.5 py-1.5 text-xs bg-white border border-slate-300 rounded focus:ring-1 focus:ring-emerald-600 font-mono"
+                    className={`w-full px-2.5 py-1.5 text-xs font-mono rounded border transition ${
+                      isCurrentlyLocked
+                        ? "bg-slate-100 text-slate-600 border-slate-300 cursor-not-allowed select-none"
+                        : "bg-white border-slate-300 focus:ring-1 focus:ring-emerald-600"
+                    }`}
                   />
                 </div>
               </div>
@@ -255,7 +278,9 @@ export const LockRegisterModal: React.FC<LockRegisterModalProps> = ({
           <div className="p-3 rounded-lg border border-slate-200 bg-slate-50/70 space-y-2">
             <div className="text-[11px] font-bold text-slate-800 uppercase tracking-wider flex items-center justify-between border-b border-slate-200 pb-1">
               <span>Pejabat Penandatangan Kanan (Kasi Intel)</span>
-              <span className="text-[10px] text-slate-400 font-normal">Snapshot Tersimpan</span>
+              <span className="text-[10px] text-slate-400 font-normal">
+                {isCurrentlyLocked ? "🔒 Terkunci" : "Snapshot Tersimpan"}
+              </span>
             </div>
             <div className="space-y-2">
               <div>
@@ -264,8 +289,13 @@ export const LockRegisterModal: React.FC<LockRegisterModalProps> = ({
                   type="text"
                   value={rightSignerTitle}
                   onChange={(e) => setRightSignerTitle(e.target.value)}
+                  disabled={Boolean(isCurrentlyLocked)}
                   required
-                  className="w-full px-2.5 py-1.5 text-xs bg-white border border-slate-300 rounded focus:ring-1 focus:ring-emerald-600"
+                  className={`w-full px-2.5 py-1.5 text-xs rounded border transition ${
+                    isCurrentlyLocked
+                      ? "bg-slate-100 text-slate-600 border-slate-300 cursor-not-allowed select-none"
+                      : "bg-white border-slate-300 focus:ring-1 focus:ring-emerald-600"
+                  }`}
                 />
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -275,8 +305,13 @@ export const LockRegisterModal: React.FC<LockRegisterModalProps> = ({
                     type="text"
                     value={rightSignerName}
                     onChange={(e) => setRightSignerName(e.target.value)}
+                    disabled={Boolean(isCurrentlyLocked)}
                     required
-                    className="w-full px-2.5 py-1.5 text-xs font-semibold bg-white border border-slate-300 rounded focus:ring-1 focus:ring-emerald-600"
+                    className={`w-full px-2.5 py-1.5 text-xs font-semibold rounded border transition ${
+                      isCurrentlyLocked
+                        ? "bg-slate-100 text-slate-600 border-slate-300 cursor-not-allowed select-none"
+                        : "bg-white border-slate-300 focus:ring-1 focus:ring-emerald-600"
+                    }`}
                   />
                 </div>
                 <div>
@@ -285,8 +320,13 @@ export const LockRegisterModal: React.FC<LockRegisterModalProps> = ({
                     type="text"
                     value={rightSignerPangkatNip}
                     onChange={(e) => setRightSignerPangkatNip(e.target.value)}
+                    disabled={Boolean(isCurrentlyLocked)}
                     required
-                    className="w-full px-2.5 py-1.5 text-xs bg-white border border-slate-300 rounded focus:ring-1 focus:ring-emerald-600 font-mono"
+                    className={`w-full px-2.5 py-1.5 text-xs font-mono rounded border transition ${
+                      isCurrentlyLocked
+                        ? "bg-slate-100 text-slate-600 border-slate-300 cursor-not-allowed select-none"
+                        : "bg-white border-slate-300 focus:ring-1 focus:ring-emerald-600"
+                    }`}
                   />
                 </div>
               </div>
@@ -301,8 +341,13 @@ export const LockRegisterModal: React.FC<LockRegisterModalProps> = ({
                 type="text"
                 value={tempatDokumen}
                 onChange={(e) => setTempatDokumen(e.target.value)}
+                disabled={Boolean(isCurrentlyLocked)}
                 required
-                className="w-full px-2.5 py-1.5 text-xs bg-white border border-slate-300 rounded focus:ring-1 focus:ring-emerald-600"
+                className={`w-full px-2.5 py-1.5 text-xs rounded border transition ${
+                  isCurrentlyLocked
+                    ? "bg-slate-100 text-slate-600 border-slate-300 cursor-not-allowed select-none"
+                    : "bg-white border-slate-300 focus:ring-1 focus:ring-emerald-600"
+                }`}
               />
             </div>
             <div>
@@ -311,8 +356,13 @@ export const LockRegisterModal: React.FC<LockRegisterModalProps> = ({
                 type="date"
                 value={closingDate}
                 onChange={(e) => setClosingDate(e.target.value)}
+                disabled={Boolean(isCurrentlyLocked)}
                 required
-                className="w-full px-2.5 py-1.5 text-xs font-mono bg-white border border-slate-300 rounded focus:ring-1 focus:ring-emerald-600"
+                className={`w-full px-2.5 py-1.5 text-xs font-mono rounded border transition ${
+                  isCurrentlyLocked
+                    ? "bg-slate-100 text-slate-600 border-slate-300 cursor-not-allowed select-none"
+                    : "bg-white border-slate-300 focus:ring-1 focus:ring-emerald-600"
+                }`}
               />
             </div>
           </div>
@@ -339,16 +389,18 @@ export const LockRegisterModal: React.FC<LockRegisterModalProps> = ({
                 onClick={onClose}
                 className="px-3 py-1.5 text-xs font-medium text-slate-600 hover:text-slate-800 bg-slate-100 hover:bg-slate-200 rounded transition cursor-pointer"
               >
-                Tutup
+                {isCurrentlyLocked ? "Tutup (Selesai)" : "Batal"}
               </button>
-              <button
-                type="submit"
-                disabled={isSubmitting}
-                className="px-4 py-1.5 text-xs font-bold text-white bg-emerald-700 hover:bg-emerald-800 rounded shadow-xs flex items-center gap-1.5 transition cursor-pointer disabled:opacity-50"
-              >
-                <Check className="w-3.5 h-3.5" />
-                <span>{isSubmitting ? "Menyimpan..." : isCurrentlyLocked ? "Simpan Perubahan Kunci" : "Kunci Register Sekarang"}</span>
-              </button>
+              {!isCurrentlyLocked && (
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="px-4 py-1.5 text-xs font-bold text-white bg-emerald-700 hover:bg-emerald-800 rounded shadow-xs flex items-center gap-1.5 transition cursor-pointer disabled:opacity-50"
+                >
+                  <Check className="w-3.5 h-3.5" />
+                  <span>{isSubmitting ? "Menyimpan..." : "Kunci Register Sekarang"}</span>
+                </button>
+              )}
             </div>
           </div>
         </form>
