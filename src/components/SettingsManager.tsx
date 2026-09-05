@@ -22,7 +22,7 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
       ? settings.availableYears
       : [2024, 2025, 2026, 2027, 2028]
   );
-  const [selectedYear, setSelectedYear] = useState<number>(2026);
+  const [selectedYear, setSelectedYear] = useState<number>(() => new Date().getFullYear());
   const [newYearInput, setNewYearInput] = useState<string>("");
   const [closingDatesState, setClosingDatesState] = useState<Record<string, string>>(
     settings.closingDates || {}

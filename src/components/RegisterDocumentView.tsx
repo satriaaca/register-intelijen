@@ -119,8 +119,12 @@ export const RegisterDocumentView: React.FC<RegisterDocumentViewProps> = ({
     "landscape" | "portrait"
   >(register.orientation || "landscape");
 
-  const [selectedYear, setSelectedYear] = useState(2026);
-  const [selectedMonth, setSelectedMonth] = useState<number | "all">(1);
+  const now = new Date();
+  const currentCalendarYear = now.getFullYear();
+  const currentCalendarMonth = now.getMonth() + 1;
+
+  const [selectedYear, setSelectedYear] = useState<number>(() => currentCalendarYear);
+  const [selectedMonth, setSelectedMonth] = useState<number | "all">(() => currentCalendarMonth);
 
   // Filter Kategori Khusus R.IN.3
   const [rin3CategoryFilter, setRin3CategoryFilter] = useState<Rin3CategoryType | "all">("all");
@@ -393,17 +397,31 @@ export const RegisterDocumentView: React.FC<RegisterDocumentViewProps> = ({
   };
 
   const handleOpenNew = () => {
+    if (currentLock?.isLocked) {
+      alert("Dokumen register periode ini telah dikunci (Tutup Buku). Buka kunci terlebih dahulu untuk menambah baris.");
+      return;
+    }
     setEditingEntry(null);
     setIsFormOpen(true);
   };
 
   const handleOpenEdit = (entry: RegisterEntryRow) => {
+    if (currentLock?.isLocked) {
+      alert("Dokumen register periode ini telah dikunci (Tutup Buku). Data dokumen dan petugas tidak dapat diubah lagi.");
+      return;
+    }
     setEditingEntry(entry);
     setIsFormOpen(true);
   };
 
   const handleConfirmDelete = async () => {
     if (!entryToDelete) {
+      return;
+    }
+
+    if (currentLock?.isLocked) {
+      alert("Dokumen register periode ini telah dikunci (Tutup Buku). Baris data tidak dapat dihapus.");
+      setEntryToDelete(null);
       return;
     }
 
@@ -427,6 +445,7 @@ export const RegisterDocumentView: React.FC<RegisterDocumentViewProps> = ({
     selectedEntryIds.length > 0 && !isAllSelected;
 
   const handleToggleSelectAll = () => {
+    if (currentLock?.isLocked) return;
     if (isAllSelected) {
       setSelectedEntryIds((prev) =>
         prev.filter((id) => !filteredEntryIds.includes(id)),
@@ -439,6 +458,7 @@ export const RegisterDocumentView: React.FC<RegisterDocumentViewProps> = ({
   };
 
   const handleToggleSelectEntry = (id: number) => {
+    if (currentLock?.isLocked) return;
     setSelectedEntryIds((prev) =>
       prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id],
     );
@@ -446,6 +466,12 @@ export const RegisterDocumentView: React.FC<RegisterDocumentViewProps> = ({
 
   const handleConfirmBatchDelete = async () => {
     if (selectedEntryIds.length === 0) {
+      return;
+    }
+
+    if (currentLock?.isLocked) {
+      alert("Dokumen register periode ini telah dikunci (Tutup Buku).");
+      setIsBatchDeleteModalOpen(false);
       return;
     }
 
@@ -590,9 +616,32 @@ export const RegisterDocumentView: React.FC<RegisterDocumentViewProps> = ({
               </select>
             </div>
 
-            <span className="rounded border border-emerald-300 bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-900">
-              Periode Aktif: {currentPeriodLabel}
-            </span>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="rounded border border-emerald-300 bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-900 flex items-center gap-1.5">
+                <span>Periode Aktif: {currentPeriodLabel}</span>
+                {selectedYear === currentCalendarYear && selectedMonth === currentCalendarMonth && (
+                  <span className="rounded bg-emerald-700 px-1.5 py-0.5 text-[9px] font-bold text-white uppercase tracking-wider">
+                    Bulan Berjalan
+                  </span>
+                )}
+              </span>
+
+              {(selectedYear !== currentCalendarYear || selectedMonth !== currentCalendarMonth) && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedYear(currentCalendarYear);
+                    setSelectedMonth(currentCalendarMonth);
+                    setIsEditingClosingDate(false);
+                  }}
+                  className="inline-flex cursor-pointer items-center gap-1 rounded border border-emerald-400 bg-emerald-100/90 px-2 py-0.5 text-[11px] font-bold text-emerald-800 shadow-2xs transition hover:bg-emerald-200"
+                  title="Klik untuk langsung kembali ke Periode Bulan Berjalan saat ini"
+                >
+                  <Calendar className="h-3 w-3 text-emerald-700" />
+                  <span>Ke Bulan Berjalan</span>
+                </button>
+              )}
+            </div>
           </div>
 
           {typeof selectedMonth === "number" && (
@@ -669,6 +718,9 @@ export const RegisterDocumentView: React.FC<RegisterDocumentViewProps> = ({
           {MONTH_NAMES_ID.map((name, index) => {
             const monthNumber = index + 1;
             const isSelected = selectedMonth === monthNumber;
+            const isCurrentMonth =
+              selectedYear === currentCalendarYear &&
+              monthNumber === currentCalendarMonth;
 
             const count = filterEntriesByPeriod(
               entries,
@@ -684,19 +736,36 @@ export const RegisterDocumentView: React.FC<RegisterDocumentViewProps> = ({
                   setSelectedMonth(monthNumber);
                   setIsEditingClosingDate(false);
                 }}
-                className={`flex cursor-pointer items-center gap-1 whitespace-nowrap rounded px-2 py-1 text-xs transition ${isSelected
-                    ? "bg-emerald-700 font-bold text-white shadow-sm"
+                title={isCurrentMonth ? `${name} (Bulan Berjalan)` : name}
+                className={`flex cursor-pointer items-center gap-1 whitespace-nowrap rounded px-2 py-1 text-xs transition ${
+                  isSelected
+                    ? "bg-emerald-700 font-bold text-white shadow-sm ring-1 ring-emerald-800"
+                    : isCurrentMonth
+                    ? "border border-emerald-400 bg-emerald-50/80 font-bold text-emerald-900 hover:bg-emerald-100"
                     : "border border-slate-200 bg-slate-100 font-medium text-slate-700 hover:bg-slate-200"
-                  }`}
+                }`}
               >
                 <span>{MONTH_SHORT_ID[index]}</span>
 
+                {isCurrentMonth && (
+                  <span
+                    className={`rounded px-1 py-0.2 text-[8px] font-bold uppercase tracking-tight ${
+                      isSelected
+                        ? "bg-emerald-800 text-emerald-100"
+                        : "bg-emerald-200 text-emerald-900"
+                    }`}
+                  >
+                    Kini
+                  </span>
+                )}
+
                 {count > 0 && (
                   <span
-                    className={`rounded-full px-1 py-0.5 font-mono text-[9px] font-bold ${isSelected
+                    className={`rounded-full px-1 py-0.5 font-mono text-[9px] font-bold ${
+                      isSelected
                         ? "bg-white text-emerald-800"
                         : "bg-emerald-100 text-emerald-800"
-                      }`}
+                    }`}
                   >
                     {count}
                   </span>
@@ -952,6 +1021,28 @@ export const RegisterDocumentView: React.FC<RegisterDocumentViewProps> = ({
         </div>
       )}
 
+      {/* Banner Informasi Dokumen Terkunci */}
+      {currentLock?.isLocked && (
+        <div className="flex items-center justify-between gap-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-950 shadow-xs">
+          <div className="flex items-center gap-2.5">
+            <Lock className="h-4 w-4 shrink-0 text-amber-700" />
+            <div>
+              <span className="font-bold">STATUS DOKUMEN TERKUNCI (TUTUP BUKU):</span>{" "}
+              <span>
+                Dokumen register periode ini telah dikunci. Seluruh entri dan data petugas penandatangan dibekukan dan tidak dapat diubah/dihapus lagi untuk menjamin keabsahan arsip.
+              </span>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setIsLockModalOpen(true)}
+            className="shrink-0 rounded border border-amber-400 bg-amber-200/80 px-2.5 py-1 text-[11px] font-bold text-amber-900 transition hover:bg-amber-300 cursor-pointer"
+          >
+            Buka Kunci (Unlock)
+          </button>
+        </div>
+      )}
+
       <div className="rounded-lg border border-slate-300 bg-white p-4 font-sans shadow-sm sm:p-6">
         <div className="relative mb-4 rounded-sm border border-slate-900 p-3">
           <div className="absolute right-2.5 top-2 flex items-center gap-1.5 font-mono text-xs font-bold text-slate-800">
@@ -1062,6 +1153,7 @@ export const RegisterDocumentView: React.FC<RegisterDocumentViewProps> = ({
                       id="checkbox-select-all-header"
                       type="checkbox"
                       checked={isAllSelected}
+                      disabled={Boolean(currentLock?.isLocked)}
                       ref={(el) => {
                         if (el) {
                           el.indeterminate = isSomeSelected;
@@ -1069,11 +1161,15 @@ export const RegisterDocumentView: React.FC<RegisterDocumentViewProps> = ({
                       }}
                       onChange={handleToggleSelectAll}
                       title={
-                        isAllSelected
+                        currentLock?.isLocked
+                          ? "Dokumen register terkunci (Tutup Buku)"
+                          : isAllSelected
                           ? "Batalkan pilihan semua"
                           : "Pilih semua baris yang tampil"
                       }
-                      className="h-3.5 w-3.5 cursor-pointer rounded border-slate-400 text-emerald-600 accent-emerald-600 focus:ring-emerald-500"
+                      className={`h-3.5 w-3.5 rounded border-slate-400 text-emerald-600 accent-emerald-600 focus:ring-emerald-500 ${
+                        currentLock?.isLocked ? "cursor-not-allowed opacity-30" : "cursor-pointer"
+                      }`}
                     />
                   </div>
                 </th>
@@ -1223,9 +1319,12 @@ export const RegisterDocumentView: React.FC<RegisterDocumentViewProps> = ({
                             id={`check-entry-${entry.id}`}
                             type="checkbox"
                             checked={isSelected}
+                            disabled={Boolean(currentLock?.isLocked)}
                             onChange={() => handleToggleSelectEntry(entry.id)}
                             aria-label={`Pilih baris nomor ${entry.nomorUrut}`}
-                            className="h-3.5 w-3.5 cursor-pointer rounded border-slate-400 text-emerald-600 accent-emerald-600 focus:ring-emerald-500"
+                            className={`h-3.5 w-3.5 rounded border-slate-400 text-emerald-600 accent-emerald-600 focus:ring-emerald-500 ${
+                              currentLock?.isLocked ? "cursor-not-allowed opacity-30" : "cursor-pointer"
+                            }`}
                           />
                         </div>
                       </td>
@@ -1277,27 +1376,36 @@ export const RegisterDocumentView: React.FC<RegisterDocumentViewProps> = ({
                       })}
 
                       <td className="bg-slate-50/60 px-1 py-1.5 text-center align-top">
-                        <div className="flex items-center justify-center gap-1">
-                          <button
-                            id={`btn-edit-row-${entry.id}`}
-                            type="button"
-                            onClick={() => handleOpenEdit(entry)}
-                            title="Edit Data Baris"
-                            className="cursor-pointer rounded p-1 text-slate-500 transition hover:bg-emerald-100 hover:text-emerald-700"
-                          >
-                            <Edit3 className="h-3.5 w-3.5" />
-                          </button>
+                        {currentLock?.isLocked ? (
+                          <div className="flex items-center justify-center" title="Register terkunci. Dokumen tidak dapat diubah/dihapus.">
+                            <span className="inline-flex items-center gap-1 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-900 border border-amber-300 select-none">
+                              <Lock className="h-3 w-3 text-amber-700" />
+                              <span>Terkunci</span>
+                            </span>
+                          </div>
+                        ) : (
+                          <div className="flex items-center justify-center gap-1">
+                            <button
+                              id={`btn-edit-row-${entry.id}`}
+                              type="button"
+                              onClick={() => handleOpenEdit(entry)}
+                              title="Edit Data Baris"
+                              className="cursor-pointer rounded p-1 text-slate-500 transition hover:bg-emerald-100 hover:text-emerald-700"
+                            >
+                              <Edit3 className="h-3.5 w-3.5" />
+                            </button>
 
-                          <button
-                            id={`btn-delete-row-${entry.id}`}
-                            type="button"
-                            onClick={() => setEntryToDelete(entry)}
-                            title="Hapus Data Baris"
-                            className="cursor-pointer rounded p-1 text-slate-500 transition hover:bg-red-100 hover:text-red-700"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </button>
-                        </div>
+                            <button
+                              id={`btn-delete-row-${entry.id}`}
+                              type="button"
+                              onClick={() => setEntryToDelete(entry)}
+                              title="Hapus Data Baris"
+                              className="cursor-pointer rounded p-1 text-slate-500 transition hover:bg-red-100 hover:text-red-700"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        )}
                       </td>
                     </tr>
                   );
@@ -1317,14 +1425,16 @@ export const RegisterDocumentView: React.FC<RegisterDocumentViewProps> = ({
                   NIHIL
                 </span>
 
-                <button
-                  type="button"
-                  onClick={handleOpenNew}
-                  className="pointer-events-auto mt-4 inline-flex cursor-pointer items-center gap-1.5 rounded border border-dashed border-emerald-600 bg-white/95 px-3.5 py-1.5 text-xs font-bold text-emerald-700 shadow-sm backdrop-blur-xs transition hover:bg-emerald-50 hover:border-emerald-700"
-                >
-                  <Plus className="h-3.5 w-3.5" />
-                  <span>Input Baris Baru</span>
-                </button>
+                {!currentLock?.isLocked && (
+                  <button
+                    type="button"
+                    onClick={handleOpenNew}
+                    className="pointer-events-auto mt-4 inline-flex cursor-pointer items-center gap-1.5 rounded border border-dashed border-emerald-600 bg-white/95 px-3.5 py-1.5 text-xs font-bold text-emerald-700 shadow-sm backdrop-blur-xs transition hover:bg-emerald-50 hover:border-emerald-700"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    <span>Input Baris Baru</span>
+                  </button>
+                )}
               </div>
             </div>
           )}
@@ -1543,6 +1653,7 @@ export const RegisterDocumentView: React.FC<RegisterDocumentViewProps> = ({
         nextNomorUrut={nextNomorUrut}
         selectedYear={selectedYear}
         selectedMonth={selectedMonth}
+        isLocked={Boolean(currentLock?.isLocked)}
       />
 
       {entryToDelete && (

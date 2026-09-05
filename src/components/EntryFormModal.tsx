@@ -12,6 +12,7 @@ interface EntryFormModalProps {
   nextNomorUrut: number;
   selectedYear?: number;
   selectedMonth?: number | "all";
+  isLocked?: boolean;
 }
 
 export const EntryFormModal: React.FC<EntryFormModalProps> = ({
@@ -24,6 +25,7 @@ export const EntryFormModal: React.FC<EntryFormModalProps> = ({
   nextNomorUrut,
   selectedYear = new Date().getFullYear(),
   selectedMonth = "all",
+  isLocked = false,
 }) => {
   const [nomorUrut, setNomorUrut] = useState<number>(nextNomorUrut);
   const [formData, setFormData] = useState<Record<string, any>>({});
@@ -81,10 +83,12 @@ export const EntryFormModal: React.FC<EntryFormModalProps> = ({
   if (!isOpen) return null;
 
   const handleChange = (key: string, value: any) => {
+    if (isLocked) return;
     setFormData((prev) => ({ ...prev, [key]: value }));
   };
 
   const handleOfficerToggle = (fieldKey: string, officerId: number) => {
+    if (isLocked) return;
     const currentList: number[] = Array.isArray(formData[fieldKey]) ? formData[fieldKey] : [];
     if (currentList.includes(officerId)) {
       handleChange(fieldKey, currentList.filter((id) => id !== officerId));
@@ -95,6 +99,7 @@ export const EntryFormModal: React.FC<EntryFormModalProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (isLocked) return;
 
     // Extract primary date or time from formData
     let primaryTgl: string | undefined = undefined;
@@ -178,8 +183,13 @@ export const EntryFormModal: React.FC<EntryFormModalProps> = ({
             type="date"
             id={`input-field-${col.key}`}
             value={val}
+            disabled={isLocked}
             onChange={(e) => handleChange(col.key, e.target.value)}
-            className="w-full px-2.5 py-1.5 text-xs bg-slate-50 border border-slate-300 rounded focus:ring-1 focus:ring-emerald-600 focus:bg-white"
+            className={`w-full px-2.5 py-1.5 text-xs rounded border transition ${
+              isLocked
+                ? "bg-slate-100 text-slate-600 border-slate-300 cursor-not-allowed select-none"
+                : "bg-slate-50 border-slate-300 focus:ring-1 focus:ring-emerald-600 focus:bg-white"
+            }`}
           />
         </div>
       );
@@ -192,8 +202,13 @@ export const EntryFormModal: React.FC<EntryFormModalProps> = ({
             type="time"
             id={`input-field-${col.key}`}
             value={val}
+            disabled={isLocked}
             onChange={(e) => handleChange(col.key, e.target.value)}
-            className="w-full px-2.5 py-1.5 text-xs bg-slate-50 border border-slate-300 rounded focus:ring-1 focus:ring-emerald-600 focus:bg-white"
+            className={`w-full px-2.5 py-1.5 text-xs rounded border transition ${
+              isLocked
+                ? "bg-slate-100 text-slate-600 border-slate-300 cursor-not-allowed select-none"
+                : "bg-slate-50 border-slate-300 focus:ring-1 focus:ring-emerald-600 focus:bg-white"
+            }`}
           />
         </div>
       );
@@ -206,21 +221,31 @@ export const EntryFormModal: React.FC<EntryFormModalProps> = ({
             type="date"
             id={`input-field-${col.key}-date`}
             value={typeof val === "string" ? val.split(" ")[0] || "" : ""}
+            disabled={isLocked}
             onChange={(e) => {
               const timePart = typeof val === "string" && val.includes(" ") ? val.split(" ")[1] : "09:00";
               handleChange(col.key, `${e.target.value} ${timePart}`);
             }}
-            className="w-full px-2 py-1.5 text-xs bg-slate-50 border border-slate-300 rounded focus:ring-1 focus:ring-emerald-600 focus:bg-white"
+            className={`w-full px-2 py-1.5 text-xs rounded border transition ${
+              isLocked
+                ? "bg-slate-100 text-slate-600 border-slate-300 cursor-not-allowed select-none"
+                : "bg-slate-50 border-slate-300 focus:ring-1 focus:ring-emerald-600 focus:bg-white"
+            }`}
           />
           <input
             type="time"
             id={`input-field-${col.key}-time`}
             value={typeof val === "string" && val.includes(" ") ? val.split(" ")[1] : "09:00"}
+            disabled={isLocked}
             onChange={(e) => {
               const datePart = typeof val === "string" && val.includes(" ") ? val.split(" ")[0] : new Date().toISOString().split("T")[0];
               handleChange(col.key, `${datePart} ${e.target.value}`);
             }}
-            className="w-full px-2 py-1.5 text-xs bg-slate-50 border border-slate-300 rounded focus:ring-1 focus:ring-emerald-600 focus:bg-white"
+            className={`w-full px-2 py-1.5 text-xs rounded border transition ${
+              isLocked
+                ? "bg-slate-100 text-slate-600 border-slate-300 cursor-not-allowed select-none"
+                : "bg-slate-50 border-slate-300 focus:ring-1 focus:ring-emerald-600 focus:bg-white"
+            }`}
           />
         </div>
       );
@@ -231,8 +256,13 @@ export const EntryFormModal: React.FC<EntryFormModalProps> = ({
         <select
           id={`select-field-${col.key}`}
           value={val}
+          disabled={isLocked}
           onChange={(e) => handleChange(col.key, e.target.value)}
-          className="w-full px-2.5 py-1.5 text-xs bg-slate-50 border border-slate-300 rounded focus:ring-1 focus:ring-emerald-600 focus:bg-white"
+          className={`w-full px-2.5 py-1.5 text-xs rounded border transition ${
+            isLocked
+              ? "bg-slate-100 text-slate-600 border-slate-300 cursor-not-allowed select-none"
+              : "bg-slate-50 border-slate-300 focus:ring-1 focus:ring-emerald-600 focus:bg-white"
+          }`}
         >
           <option value="">-- Pilih {col.label} --</option>
           {(col.options || []).map((opt) => (
@@ -249,8 +279,13 @@ export const EntryFormModal: React.FC<EntryFormModalProps> = ({
         <select
           id={`select-officer-${col.key}`}
           value={val}
+          disabled={isLocked}
           onChange={(e) => handleChange(col.key, Number(e.target.value) || e.target.value)}
-          className="w-full px-2.5 py-1.5 text-xs bg-slate-50 border border-slate-300 rounded focus:ring-1 focus:ring-emerald-600 focus:bg-white"
+          className={`w-full px-2.5 py-1.5 text-xs rounded border transition ${
+            isLocked
+              ? "bg-slate-100 text-slate-600 border-slate-300 cursor-not-allowed select-none"
+              : "bg-slate-50 border-slate-300 focus:ring-1 focus:ring-emerald-600 focus:bg-white"
+          }`}
         >
           <option value="">-- Pilih Petugas --</option>
           {officers.map((off) => (
@@ -273,16 +308,19 @@ export const EntryFormModal: React.FC<EntryFormModalProps> = ({
       return (
         <div className="border border-slate-300 rounded p-2.5 bg-slate-50 space-y-2">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold text-slate-700 uppercase">
-              Petugas Pelaksana ({selectedIds.length} Terpilih)
+            <span className="text-[11px] font-bold text-slate-700 uppercase flex items-center gap-1.5">
+              <span>Petugas Pelaksana ({selectedIds.length} Terpilih)</span>
+              {isLocked && <span className="text-[10px] text-amber-800 font-bold bg-amber-100 px-1.5 py-0.2 rounded border border-amber-300">🔒 Terkunci</span>}
             </span>
-            <input
-              type="text"
-              placeholder="Cari nama/NIP..."
-              value={officerSearch}
-              onChange={(e) => setOfficerSearch(e.target.value)}
-              className="text-xs px-2 py-0.5 bg-white border border-slate-300 rounded w-36"
-            />
+            {!isLocked && (
+              <input
+                type="text"
+                placeholder="Cari nama/NIP..."
+                value={officerSearch}
+                onChange={(e) => setOfficerSearch(e.target.value)}
+                className="text-xs px-2 py-0.5 bg-white border border-slate-300 rounded w-36"
+              />
+            )}
           </div>
 
           {/* Selected Badges */}
@@ -300,14 +338,16 @@ export const EntryFormModal: React.FC<EntryFormModalProps> = ({
                       {sIdx + 1}
                     </span>
                     <span className="font-semibold">{off.nama}</span>
-                    <button
-                      type="button"
-                      onClick={() => handleOfficerToggle(col.key, id)}
-                      className="text-slate-400 hover:text-red-600 cursor-pointer ml-0.5"
-                      title="Hapus pilihan"
-                    >
-                      <X className="w-3 h-3" />
-                    </button>
+                    {!isLocked && (
+                      <button
+                        type="button"
+                        onClick={() => handleOfficerToggle(col.key, id)}
+                        className="text-slate-400 hover:text-red-600 cursor-pointer ml-0.5"
+                        title="Hapus pilihan"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    )}
                   </span>
                 );
               })}
@@ -326,15 +366,20 @@ export const EntryFormModal: React.FC<EntryFormModalProps> = ({
                 return (
                   <label
                     key={off.id}
-                    className={`flex items-start gap-1.5 p-1 rounded cursor-pointer text-xs transition ${
+                    className={`flex items-start gap-1.5 p-1 rounded text-xs transition ${
+                      isLocked ? "cursor-not-allowed opacity-75" : "cursor-pointer"
+                    } ${
                       isChecked ? "bg-emerald-50 text-emerald-950 font-medium" : "hover:bg-slate-50 text-slate-700"
                     }`}
                   >
                     <input
                       type="checkbox"
                       checked={isChecked}
+                      disabled={isLocked}
                       onChange={() => handleOfficerToggle(col.key, off.id)}
-                      className="mt-0.5 rounded text-emerald-600 focus:ring-emerald-500"
+                      className={`mt-0.5 rounded text-emerald-600 focus:ring-emerald-500 ${
+                        isLocked ? "cursor-not-allowed opacity-40" : "cursor-pointer"
+                      }`}
                     />
                     <span className="text-[10px] font-mono text-slate-400 w-4 text-right shrink-0 mt-0.5">
                       {optIdx + 1}.
@@ -360,9 +405,14 @@ export const EntryFormModal: React.FC<EntryFormModalProps> = ({
           id={`input-field-${col.key}`}
           rows={2}
           value={val}
+          disabled={isLocked}
           placeholder={col.placeholder || `Masukkan ${col.label.toLowerCase()}...`}
           onChange={(e) => handleChange(col.key, e.target.value)}
-          className="w-full px-2.5 py-1.5 text-xs bg-slate-50 border border-slate-300 rounded focus:ring-1 focus:ring-emerald-600 focus:bg-white"
+          className={`w-full px-2.5 py-1.5 text-xs rounded border transition ${
+            isLocked
+              ? "bg-slate-100 text-slate-600 border-slate-300 cursor-not-allowed select-none"
+              : "bg-slate-50 border-slate-300 focus:ring-1 focus:ring-emerald-600 focus:bg-white"
+          }`}
         />
       );
     }
@@ -375,9 +425,14 @@ export const EntryFormModal: React.FC<EntryFormModalProps> = ({
           id={`input-field-${col.key}`}
           list={col.key === "kode_penyimpanan" ? "storage-codes-datalist" : undefined}
           value={val}
+          disabled={isLocked}
           placeholder={col.placeholder || `Masukkan ${col.label.toLowerCase()}...`}
           onChange={(e) => handleChange(col.key, e.target.value)}
-          className="w-full px-2.5 py-1.5 text-xs bg-slate-50 border border-slate-300 rounded focus:ring-1 focus:ring-emerald-600 focus:bg-white"
+          className={`w-full px-2.5 py-1.5 text-xs rounded border transition ${
+            isLocked
+              ? "bg-slate-100 text-slate-600 border-slate-300 cursor-not-allowed select-none"
+              : "bg-slate-50 border-slate-300 focus:ring-1 focus:ring-emerald-600 focus:bg-white"
+          }`}
         />
         {col.key === "kode_penyimpanan" && (
           <datalist id="storage-codes-datalist">
@@ -403,8 +458,17 @@ export const EntryFormModal: React.FC<EntryFormModalProps> = ({
                 {register.code}
               </span>
               <h2 className="text-xs sm:text-sm font-bold text-slate-900 uppercase tracking-tight">
-                {initialEntry ? "Edit Data Baris Register" : "Tambah Data Baru ke Register"}
+                {isLocked
+                  ? "Detail Data Baris Register (Terkunci)"
+                  : initialEntry
+                  ? "Edit Data Baris Register"
+                  : "Tambah Data Baru ke Register"}
               </h2>
+              {isLocked && (
+                <span className="text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300 px-2 py-0.5 rounded flex items-center gap-1 select-none">
+                  🔒 Dokumen Terkunci (Read-Only)
+                </span>
+              )}
             </div>
             <p className="text-[10px] sm:text-[11px] text-slate-500 mt-0.5 line-clamp-1">{register.title}</p>
           </div>
@@ -418,6 +482,17 @@ export const EntryFormModal: React.FC<EntryFormModalProps> = ({
 
         {/* Modal Body / Form */}
         <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-4 space-y-3">
+          {/* Locked Notification Banner */}
+          {isLocked && (
+            <div className="p-3 rounded-lg bg-amber-50 border border-amber-300 text-amber-950 text-xs flex items-start gap-2.5">
+              <span className="text-base leading-none">🔒</span>
+              <div className="leading-relaxed">
+                <span className="font-bold">Register Periode Ini Telah Dikunci (Tutup Buku):</span>{" "}
+                Seluruh data baris dan penugasan petugas pelaksana telah dibekukan secara permanen. Data petugas tidak dapat diubah-ubah lagi kecuali kunci register dibuka terlebih dahulu di menu Tutup Buku.
+              </div>
+            </div>
+          )}
+
           {/* Row Number Control */}
           <div className="bg-amber-50/80 border border-amber-300/80 p-2 rounded flex items-center justify-between">
             <label className="text-[11px] font-bold text-amber-900 uppercase">Nomor Urut Buku Register</label>
@@ -428,9 +503,14 @@ export const EntryFormModal: React.FC<EntryFormModalProps> = ({
                 id="input-nomor-urut"
                 min="1"
                 required
+                disabled={isLocked}
                 value={nomorUrut}
                 onChange={(e) => setNomorUrut(parseInt(e.target.value, 10) || 1)}
-                className="w-16 px-2 py-0.5 text-xs font-bold text-center bg-white border border-amber-400 rounded shadow-2xs font-mono"
+                className={`w-16 px-2 py-0.5 text-xs font-bold text-center border rounded shadow-2xs font-mono ${
+                  isLocked
+                    ? "bg-slate-100 text-slate-500 border-slate-300 cursor-not-allowed"
+                    : "bg-white border-amber-400"
+                }`}
               />
             </div>
           </div>
@@ -444,12 +524,17 @@ export const EntryFormModal: React.FC<EntryFormModalProps> = ({
               </label>
               <select
                 id="select-rin3-category"
+                disabled={isLocked}
                 value={formData.kategori || formData.bidang || "IDEOLOGI, POLITIK, PERTAHANAN DAN KEAMANAN"}
                 onChange={(e) => {
                   handleChange("kategori", e.target.value);
                   handleChange("bidang", e.target.value);
                 }}
-                className="w-full px-2.5 py-1.5 text-xs font-semibold bg-white border border-emerald-400 rounded focus:ring-1 focus:ring-emerald-600 text-slate-800"
+                className={`w-full px-2.5 py-1.5 text-xs font-semibold rounded border ${
+                  isLocked
+                    ? "bg-slate-100 text-slate-500 border-slate-300 cursor-not-allowed"
+                    : "bg-white border-emerald-400 focus:ring-1 focus:ring-emerald-600 text-slate-800"
+                }`}
               >
                 {RIN3_CATEGORIES.map((cat) => (
                   <option key={cat} value={cat}>
@@ -504,21 +589,33 @@ export const EntryFormModal: React.FC<EntryFormModalProps> = ({
 
           {/* Modal Footer Buttons */}
           <div className="pt-3 border-t border-slate-200 flex items-center justify-end gap-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-3 py-1.5 text-xs font-medium text-slate-600 hover:text-slate-800 bg-slate-100 hover:bg-slate-200 rounded transition cursor-pointer"
-            >
-              Batal
-            </button>
-            <button
-              type="submit"
-              id="btn-submit-entry"
-              className="px-4 py-1.5 text-xs font-bold text-white bg-emerald-700 hover:bg-emerald-800 rounded shadow-2xs flex items-center gap-1.5 transition cursor-pointer"
-            >
-              <Check className="w-3.5 h-3.5" />
-              <span>Simpan ke Database</span>
-            </button>
+            {isLocked ? (
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-4 py-1.5 text-xs font-semibold text-slate-700 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 rounded transition cursor-pointer"
+              >
+                Tutup (Hanya Lihat)
+              </button>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="px-3 py-1.5 text-xs font-medium text-slate-600 hover:text-slate-800 bg-slate-100 hover:bg-slate-200 rounded transition cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  id="btn-submit-entry"
+                  className="px-4 py-1.5 text-xs font-bold text-white bg-emerald-700 hover:bg-emerald-800 rounded shadow-2xs flex items-center gap-1.5 transition cursor-pointer"
+                >
+                  <Check className="w-3.5 h-3.5" />
+                  <span>Simpan ke Database</span>
+                </button>
+              </>
+            )}
           </div>
         </form>
       </div>
