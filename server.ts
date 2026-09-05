@@ -235,6 +235,46 @@ async function startServer() {
     }
   });
 
+  // Handler fungsi untuk batch-delete baris register
+  const handleBatchDeleteEntries = async (req: express.Request, res: express.Response) => {
+    try {
+      const rawIds = req.body?.ids || req.body?.entryIds;
+
+      if (!Array.isArray(rawIds) || rawIds.length === 0) {
+        return res.status(400).json({
+          error: "Daftar ID baris register tidak valid atau kosong.",
+        });
+      }
+
+      const numericIds = rawIds
+        .map((val: unknown) => Number(val))
+        .filter((num: number) => !isNaN(num) && num > 0);
+
+      if (numericIds.length === 0) {
+        return res.status(400).json({
+          error: "Daftar ID baris register kosong.",
+        });
+      }
+
+      const deletedCount = await deleteRegisterEntriesBatch(numericIds);
+      res.json({ success: true, count: deletedCount });
+    } catch (error: unknown) {
+      console.error("Error batch deleting entries:", error);
+
+      res.status(500).json({
+        error: getErrorMessage(error, "Failed to batch delete entries"),
+      });
+    }
+  };
+
+  // Daftarkan endpoint batch-delete dengan berbagai format rute & method agar selalu kompatibel
+  app.post("/api/registers/:code/entries/batch-delete", handleBatchDeleteEntries);
+  app.post("/api/registers/:code/batch-delete", handleBatchDeleteEntries);
+  app.delete("/api/registers/:code/entries/batch-delete", handleBatchDeleteEntries);
+  app.delete("/api/registers/:code/batch-delete", handleBatchDeleteEntries);
+  app.post("/api/registers/batch-delete", handleBatchDeleteEntries);
+  app.delete("/api/registers/batch-delete", handleBatchDeleteEntries);
+
   app.delete("/api/registers/:code/entries/:id", async (req, res) => {
     try {
       const id = parseId(req.params.id);
@@ -252,37 +292,6 @@ async function startServer() {
 
       res.status(500).json({
         error: getErrorMessage(error, "Failed to delete entry"),
-      });
-    }
-  });
-
-  app.post("/api/registers/:code/entries/batch-delete", async (req, res) => {
-    try {
-      const { ids } = req.body;
-
-      if (!Array.isArray(ids) || ids.length === 0) {
-        return res.status(400).json({
-          error: "Daftar ID baris register tidak valid atau kosong.",
-        });
-      }
-
-      const numericIds = ids
-        .map((val: unknown) => Number(val))
-        .filter((num: number) => !isNaN(num) && num > 0);
-
-      if (numericIds.length === 0) {
-        return res.status(400).json({
-          error: "Daftar ID baris register kosong.",
-        });
-      }
-
-      const deletedCount = await deleteRegisterEntriesBatch(numericIds);
-      res.json({ success: true, count: deletedCount });
-    } catch (error: unknown) {
-      console.error("Error batch deleting entries:", error);
-
-      res.status(500).json({
-        error: getErrorMessage(error, "Failed to batch delete entries"),
       });
     }
   });

@@ -348,23 +348,68 @@ export default function App() {
   const handleBatchDeleteEntries = async (ids: number[]) => {
     if (!ids || ids.length === 0) return;
 
-    const response = await authFetch(
-      `/api/registers/${selectedCode}/entries/batch-delete`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ ids }),
-      },
-    );
+    let success = false;
+    let count = ids.length;
 
-    if (!response.ok) {
-      throw new Error("Gagal menghapus baris data register terpilih.");
+    // 1. Coba batch delete endpoint utama
+    try {
+      const response = await authFetch(
+        `/api/registers/${selectedCode}/entries/batch-delete`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ ids }),
+        },
+      );
+
+      if (response.ok) {
+        const resJson = await response.json();
+        count = resJson.count || ids.length;
+        success = true;
+      } else {
+        // Coba rute alternatif tanpa /entries
+        const altResponse = await authFetch(
+          `/api/registers/${selectedCode}/batch-delete`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ ids }),
+          },
+        );
+
+        if (altResponse.ok) {
+          const resJson = await altResponse.json();
+          count = resJson.count || ids.length;
+          success = true;
+        }
+      }
+    } catch (batchErr) {
+      console.warn("Batch delete endpoint call failed, attempting fallback:", batchErr);
     }
 
-    const resJson = await response.json();
-    const count = resJson.count || ids.length;
+    // 2. Fallback jika endpoint batch belum aktif / terhalang proxy
+    if (!success) {
+      try {
+        const deletePromises = ids.map((id) =>
+          authFetch(`/api/registers/${selectedCode}/entries/${id}`, {
+            method: "DELETE",
+          }),
+        );
+        const results = await Promise.all(deletePromises);
+        const anyOk = results.some((r) => r.ok);
+        if (!anyOk) {
+          throw new Error("Gagal menghapus baris data register terpilih.");
+        }
+        success = true;
+      } catch (fallbackErr) {
+        console.error("Fallback deletion failed:", fallbackErr);
+        throw new Error("Gagal menghapus baris data register terpilih.");
+      }
+    }
 
     entriesCacheRef.current.delete(selectedCode.toLowerCase());
     const idSet = new Set(ids);
