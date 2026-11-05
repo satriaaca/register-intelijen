@@ -838,30 +838,54 @@ export function transformCsvToRIn4(rows: string[][]): Array<{
 }> {
   if (rows.length < 2) return [];
 
-  // Normalisasi header: lowercase, ganti _ dan . jadi spasi, rapikan spasi ganda
   const normalizeHeader = (h: string) =>
-    h.toLowerCase().replace(/[_.]/g, " ").replace(/\s+/g, " ").trim();
+    h
+      .replace(/^\uFEFF/, "") // buang BOM kalau ada
+      .toLowerCase()
+      .replace(/[_.]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+
+  const cleanText = (s: string) => s.replace(/\s+/g, " ").trim();
 
   const headers = rows[0].map(normalizeHeader);
-  const { noIdx, tanggalIdx, nomorSuratIdx, asalIdx, halIdx } =
-    getStandardCsvColumnIndexes(headers);
 
+  // Header CSV: No | Jenis Surat | Sifat Surat | No Register Surat | Tanggal | Nomor | Asal | Tujuan | Hal | Status
+  const noIdx = findColumnIndex(headers, [
+    (h) => h === "no",
+    (h) => h === "no urut",
+    (h) => h === "nomor urut",
+  ]);
+
+  const tanggalIdx = findColumnIndex(headers, [
+    (h) => h === "tanggal",
+    (h) => h === "tgl",
+    (h) => h === "tanggal surat",
+  ]);
+
+  // "Nomor" (nomor surat lengkap), BUKAN "No Register Surat"
+  const nomorSuratIdx = findColumnIndex(headers, [
+    (h) => h === "nomor",
+    (h) => h === "nomor surat",
+    (h) => h === "no surat",
+  ]);
+
+  // Opsional: kalau suatu saat CSV punya kolom gabungan
   const noTglSuratIdx = findColumnIndex(headers, [
     (h) => h === "nomor dan tanggal",
-    (h) => h === "nomor dan tgl",
     (h) => h === "no dan tgl",
     (h) => h === "no dan tgl surat",
-    (h) => h === "tgl dan no surat",
-    (h) => h.includes("nomor") && h.includes("tanggal"),
-    (h) => h.includes("no") && h.includes("tgl"),
-    (h) => h.includes("no") && h.includes("surat"),
+    (h) => h === "no tgl surat",
   ]);
 
   const kepadaIdx = findColumnIndex(headers, [
-    (h) => h === "kepada",
     (h) => h === "tujuan",
-    (h) => h.includes("kepada"),
-    (h) => h.includes("tujuan"),
+    (h) => h === "kepada",
+  ]);
+
+  const halIdx = findColumnIndex(headers, [
+    (h) => h === "hal",
+    (h) => h === "perihal",
   ]);
 
   const lampiranIdx = findColumnIndex(headers, [
@@ -900,39 +924,32 @@ export function transformCsvToRIn4(rows: string[][]): Array<{
     if (row.length === 0 || row.every((cell) => !cell.trim())) continue;
 
     const rawNo = getCell(row, noIdx);
-    const rawNoTgl = getCell(row, noTglSuratIdx);
-
-    // Jangan pakai kolom gabungan sebagai nomor/tanggal terpisah
-    const rawTanggal =
-      tanggalIdx !== noTglSuratIdx ? getCell(row, tanggalIdx) : "";
-    const rawNomor =
-      nomorSuratIdx !== noTglSuratIdx ? getCell(row, nomorSuratIdx) : "";
-
-    const rawKepada = getCell(row, kepadaIdx) || getCell(row, asalIdx);
-    const rawHal = getCell(row, halIdx);
-    const rawLampiran = getCell(row, lampiranIdx);
-    const rawWaktu = getCell(row, waktuIdx);
-    const rawNamaParaf = getCell(row, namaParafIdx);
-    const rawKet = getCell(row, ketIdx);
+    const rawTanggal = cleanText(getCell(row, tanggalIdx));
+    const rawNomor = cleanText(getCell(row, nomorSuratIdx));
+    const rawNoTgl = cleanText(getCell(row, noTglSuratIdx));
+    const rawKepada = cleanText(getCell(row, kepadaIdx));
+    const rawHal = cleanText(getCell(row, halIdx));
+    const rawLampiran = cleanText(getCell(row, lampiranIdx));
+    const rawWaktu = cleanText(getCell(row, waktuIdx));
+    const rawNamaParaf = cleanText(getCell(row, namaParafIdx));
+    const rawKet = cleanText(getCell(row, ketIdx));
 
     const nomorUrut = getNomorUrut(rawNo, result.length + 1);
+    const isoDate = normalizeDateToIso(rawTanggal);
 
-    // Tanggal: dari kolom tanggal, fallback ambil dari string gabungan
-    let isoDate = normalizeDateToIso(rawTanggal);
-    if (!isoDate && rawNoTgl) {
-      // contoh: "B-123/N.1.10/Dsp.1/01/2025 tgl. 12 Januari 2025"
-      const m = rawNoTgl.match(/(?:tgl\.?|tanggal)\s*(.+)$/i);
-      isoDate = normalizeDateToIso(m ? m[1].trim() : rawNoTgl);
-    }
+    const jam = rawWaktu || getRandomTimeBetween(9, 15);
 
-    // Waktu: pakai dari CSV kalau ada, kalau tidak acak 09:00-15:00
-    const jam = rawWaktu.trim() || getRandomTimeBetween(9, 15);
-
-    let noTglSurat = rawNoTgl.trim();
+    // no_tgl_surat: "<Nomor> tgl. <Tanggal>"
+    // contoh: "B-993/N.1.17/Dpp/10/2026 tgl. 20-10-2026"
+    let noTglSurat = rawNoTgl;
     if (!noTglSurat) {
-      const normNomor = normalizeLetterNumber(rawNomor);
-      const displayTgl = rawTanggal.trim() || isoDate;
-      noTglSurat = normNomor ? `${normNomor} tgl. ${displayTgl}` : displayTgl;
+      const normNomor = normalizeLetterNumber(rawNomor) || rawNomor;
+      const displayTgl = rawTanggal || isoDate;
+      noTglSurat = normNomor
+        ? displayTgl
+          ? `${normNomor} tgl. ${displayTgl}`
+          : normNomor
+        : displayTgl;
     }
 
     const waktuTerima = isoDate ? `${isoDate} ${jam}` : jam;
@@ -943,11 +960,11 @@ export function transformCsvToRIn4(rows: string[][]): Array<{
       waktu: jam,
       data: {
         no_tgl_surat: noTglSurat,
-        kepada: rawKepada.trim() || "Kejaksaan Tinggi Bali",
-        perihal: rawHal.trim() || "-",
-        lampiran: rawLampiran.trim() || "-",
+        kepada: rawKepada || "Kejaksaan Tinggi Bali",
+        perihal: rawHal || "-",
+        lampiran: rawLampiran || "-",
         waktu_terima: waktuTerima,
-        nama_paraf: rawNamaParaf.trim() || "PTSP Kejati Bali",
+        nama_paraf: rawNamaParaf || "PTSP Kejati Bali",
         keterangan: rawKet.trim() || "Kajati Bali; Wakajati Bali; Asintel Kejati Bali; Aswas Kejati Bali;",
       },
     });
