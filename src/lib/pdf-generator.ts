@@ -4,8 +4,21 @@ import { RegisterDefinition, RegisterEntryRow, AppSettings, Officer, RegisterLoc
 import { MONTH_NAMES_ID, formatDateIndonesian, getClosingDateForPeriod } from "./date-utils.js";
 import { ESIGN_DATA_URL } from "../assets/esignBase64.js";
 
-// [F4] F4 / Folio = 215 x 330 mm (portrait). jsPDF menukar sisi otomatis untuk landscape.
+// F4 / Folio = 215 x 330 mm (portrait). jsPDF menukar sisi otomatis untuk landscape.
 const F4_FORMAT: [number, number] = [215, 330];
+
+// ====== Pengaturan jarak (mm) - ubah di sini kalau masih kurang pas ======
+const GAP_AFTER_TABLE = 4; // jarak tabel -> catatan penutupan
+const GAP_AFTER_CLOSING = 3; // jarak catatan penutupan -> blok berikutnya
+const SIGN_IMG_MAX_WIDTH = 34;
+const SIGN_IMG_MAX_HEIGHT = 18;
+const SIGN_IMG_GAP_BEFORE = 1; // jabatan -> gambar ttd
+const SIGN_IMG_GAP_AFTER = 1; // gambar ttd -> nama
+const TITLE_LINE_HEIGHT = 3.6; // tinggi 1 baris jabatan (font 8.5pt)
+const FOOTNOTE_RESERVE = 8; // ruang cadangan di atas catatan kaki
+
+// ====== Pengaturan lebar kolom tabel ======
+const MAX_COL_SHARE = 0.3; // 1 kolom maksimal 30% lebar konten
 
 export interface GeneratePdfOptions {
   register: RegisterDefinition;
@@ -92,7 +105,7 @@ export function generateRegisterPdf(options: GeneratePdfOptions): jsPDF {
       ? `${MONTH_NAMES_ID[selectedMonth - 1]} ${tahunTakwim}`
       : `Tahun ${tahunTakwim}`;
 
-  // [F4] Inisialisasi dokumen jsPDF dengan ukuran F4 dan kompresi aktif
+  // Inisialisasi dokumen jsPDF (F4) dengan kompresi aktif
   const doc = new jsPDF({
     orientation: isLandscape ? "landscape" : "portrait",
     unit: "mm",
@@ -107,6 +120,7 @@ export function generateRegisterPdf(options: GeneratePdfOptions): jsPDF {
   const marginTop = 14;
   const marginBottom = 14;
   const contentWidth = pageWidth - marginX * 2;
+  const pageBottomLimit = pageHeight - marginBottom - FOOTNOTE_RESERVE;
 
   // Map helper untuk lookup petugas
   const officerMap = new Map<number, Officer>();
@@ -188,16 +202,18 @@ export function generateRegisterPdf(options: GeneratePdfOptions): jsPDF {
     headRows.push(numRow);
   }
 
+  // Daftar kolom "daun" (urutannya sama dengan isi tiap baris body)
+  const leafCols: any[] = register.columns.flatMap((c: any) =>
+    c.subColumns && c.subColumns.length > 0 ? c.subColumns : [c]
+  );
+
   // Susun baris data tabel
   const bodyRows: any[] = [];
   const isDataEmpty = entries.length === 0;
 
   if (isDataEmpty) {
     // 5 baris kosong bergaris untuk format register NIHIL
-    const totalCols = register.columns.reduce(
-      (sum, col) => sum + (col.subColumns ? col.subColumns.length : 1),
-      0
-    );
+    const totalCols = leafCols.length;
     for (let i = 0; i < 5; i++) {
       const emptyRow = new Array(totalCols).fill("");
       bodyRows.push(emptyRow);
@@ -288,21 +304,98 @@ export function generateRegisterPdf(options: GeneratePdfOptions): jsPDF {
 
   const startY = drawPageHeader(doc, 1);
 
+  // ===== [FIX TEKS TERTUMPUK] Hitung lebar kolom & bungkus teks sendiri =====
+  const tableFontSize = isLandscape ? 7.5 : 8;
+  const cellPad = isDataEmpty ? 4 : 2;
+  const colExtra = cellPad * 2 + 1; // padding kiri-kanan + toleransi garis
+
+  const colCount = leafCols.length;
+  const minW: number[] = new Array(colCount).fill(0);
+  const wantW: number[] = new Array(colCount).fill(0);
+
+  doc.setFontSize(tableFontSize);
+  leafCols.forEach((col, i) => {
+    // Lebar minimum = kata terpanjang di header (huruf tebal) atau nomor kolom
+    doc.setFont("helvetica", "bold");
+    const headerWords = String(col.label ?? "").split(/\s+/).filter(Boolean);
+    const headerMin = Math.max(
+      ...headerWords.map((w) => doc.getTextWidth(w)),
+      doc.getTextWidth(String(col.colNumber ?? "")),
+      4
+    );
+
+    // Lebar yang diinginkan = baris isi terpanjang (satu baris), dibatasi MAX_COL_SHARE
+    doc.setFont("helvetica", "normal");
+    let maxLine = 0;
+    if (!isDataEmpty) {
+      bodyRows.forEach((r) => {
+        String(r[i] ?? "")
+          .split("\n")
+          .forEach((line) => {
+            const w = doc.getTextWidth(line);
+            if (w > maxLine) maxLine = w;
+          });
+      });
+    }
+    const want = Math.max(Math.min(maxLine, contentWidth * MAX_COL_SHARE), headerMin);
+
+    minW[i] = headerMin + colExtra;
+    wantW[i] = want + colExtra;
+  });
+
+  const sumMin = minW.reduce((a, b) => a + b, 0);
+  const sumWant = wantW.reduce((a, b) => a + b, 0);
+  let colWidths: number[];
+
+  if (sumMin >= contentWidth) {
+    // Kolom sangat banyak: skala proporsional (kata header terpanjang mungkin terpecah)
+    colWidths = minW.map((m) => (m / sumMin) * contentWidth);
+  } else if (sumWant <= contentWidth) {
+    // Ada sisa ruang: bagikan sesuai porsi isi
+    const spare = contentWidth - sumWant;
+    colWidths = wantW.map((w) => w + (w / sumWant) * spare);
+  } else {
+    // Ruang kurang: mulai dari minimum, tambahkan sesuai kelebihan keinginan
+    const available = contentWidth - sumMin;
+    const sumExcess = wantW.reduce((a, w, i) => a + (w - minW[i]), 0);
+    const scale = sumExcess > 0 ? available / sumExcess : 0;
+    colWidths = minW.map((m, i) => m + (wantW[i] - m) * scale);
+  }
+
+  // Bungkus isi sel supaya kata panjang tanpa spasi tidak melewati batas kolom
+  if (!isDataEmpty) {
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(tableFontSize);
+    for (let r = 0; r < bodyRows.length; r++) {
+      for (let i = 0; i < colCount; i++) {
+        const maxTextWidth = Math.max(colWidths[i] - colExtra, 3);
+        bodyRows[r][i] = String(bodyRows[r][i] ?? "")
+          .split("\n")
+          .map((line) => (doc.splitTextToSize(line, maxTextWidth) as string[]).join("\n"))
+          .join("\n");
+      }
+    }
+  }
+
+  const columnStyles: Record<number, any> = {};
+  colWidths.forEach((w, i) => {
+    columnStyles[i] = { cellWidth: w };
+  });
+
   // Render tabel menggunakan autoTable
   (autoTable as any)(doc, {
     head: headRows,
     body: bodyRows,
     startY: startY,
-    // [FIX] top = tinggi kop sebenarnya (startY), bukan angka tetap.
-    // [FIX] bottom dikecilkan: tanda tangan digambar manual setelah tabel
-    //       dan punya pengecekan addPage sendiri. Sebelumnya (marginBottom + 38)
-    //       membuat area tabel terlalu kecil -> error "row -1 ... larger than page height".
     margin: { left: marginX, right: marginX, top: startY, bottom: marginBottom + 6 },
+    tableWidth: contentWidth,
+    columnStyles,
+    rowPageBreak: "avoid", // jangan potong satu baris di antara dua halaman
     theme: "plain",
     styles: {
       font: "helvetica",
-      fontSize: isLandscape ? 7.5 : 8,
-      cellPadding: isDataEmpty ? 4 : 2, // Padding 4mm agar 5 baris proporsional & estetis
+      fontSize: tableFontSize,
+      cellPadding: cellPad, // Padding 4mm agar 5 baris NIHIL proporsional
       lineColor: [40, 40, 40],
       lineWidth: 0.25,
       textColor: [20, 20, 20],
@@ -350,31 +443,34 @@ export function generateRegisterPdf(options: GeneratePdfOptions): jsPDF {
     doc.restoreGraphicsState();
   }
 
-  // Pindah ke halaman terakhir untuk tanda tangan
+  // Pindah ke halaman terakhir untuk catatan & tanda tangan
   const totalPages = (doc as any).internal.getNumberOfPages();
   doc.setPage(totalPages);
 
-  let finalY = tableFinalY + 5;
+  let finalY = tableFinalY + GAP_AFTER_TABLE;
 
-  // Catatan Penutupan Register
-  if (finalY + 12 > pageHeight - marginBottom - 42) {
+  // ===== Catatan Penutupan Register =====
+  doc.setFont("helvetica", "italic");
+  doc.setFontSize(8);
+  const closingClause = `Catatan Penutupan: Pada hari ini ${closingDateWithDay || closingDateFormatted}, Buku Register ${register.code} periode ${monthLabel} ini ditutup dengan ${entries.length} baris data register.`;
+  const splitClosing = doc.splitTextToSize(closingClause, contentWidth - 8);
+  const closingHeight = splitClosing.length * 4;
+
+  if (finalY + closingHeight > pageBottomLimit) {
     doc.addPage();
-    drawPageHeader(doc, totalPages + 1);
+    drawPageHeader(doc, (doc as any).internal.getNumberOfPages());
     finalY = marginTop + 25;
   }
 
-  doc.setFont("helvetica", "italic");
-  doc.setFontSize(8);
   doc.setTextColor(50, 50, 50);
-  const closingClause = `Catatan Penutupan: Pada hari ini ${closingDateWithDay || closingDateFormatted}, Buku Register ${register.code} periode ${monthLabel} ini ditutup dengan ${entries.length} baris data register.`;
-  const splitClosing = doc.splitTextToSize(closingClause, contentWidth - 8);
   doc.text(splitClosing, marginX, finalY);
-  finalY += splitClosing.length * 4 + 2;
+  finalY += closingHeight + GAP_AFTER_CLOSING;
   doc.setTextColor(0, 0, 0);
 
-  // Rekapitulasi jika ada
+  // ===== Rekapitulasi jika ada =====
   if (register.hasRekapitulasi && register.rekapitulasiFields) {
-    if (finalY + 28 > pageHeight - marginBottom - 40) {
+    const rekapHeight = 4.5 + register.rekapitulasiFields.length * 4 + 4;
+    if (finalY + rekapHeight > pageBottomLimit) {
       doc.addPage();
       drawPageHeader(doc, (doc as any).internal.getNumberOfPages());
       finalY = marginTop + 25;
@@ -400,14 +496,7 @@ export function generateRegisterPdf(options: GeneratePdfOptions): jsPDF {
     finalY += 4;
   }
 
-  // Hitung ukuran gambar tanda tangan elektronik secara proporsional.
-  const SIGN_IMG_MAX_WIDTH = 40; // mm
-  const SIGN_IMG_MAX_HEIGHT = 22; // mm
-  // Offset vertikal antara teks jabatan/nama dengan gambar tanda tangan.
-  // ~2mm kira-kira setara dengan 8px pada layar (96dpi).
-  const SIGN_IMG_GAP_BEFORE = 2; // mm, jarak dari baris judul ke gambar
-  const SIGN_IMG_GAP_AFTER = 2; // mm, jarak dari gambar ke baris nama
-
+  // ===== Ukuran gambar tanda tangan elektronik (proporsional) =====
   let signImgWidth = 0;
   let signImgHeight = 0;
   try {
@@ -420,21 +509,40 @@ export function generateRegisterPdf(options: GeneratePdfOptions): jsPDF {
       signImgWidth = signImgHeight * ratio;
     }
   } catch (e) {
-    // Fallback ukuran proporsional
-    signImgWidth = 35;
-    signImgHeight = 18;
+    signImgWidth = 30;
+    signImgHeight = 15;
   }
 
-  // Cek ruang penandatanganan
-  const signatureHeight = 34 + SIGN_IMG_MAX_HEIGHT;
-  if (finalY + signatureHeight > pageHeight - marginBottom - 10) {
+  // ===== Hitung tinggi blok tanda tangan dari konten sebenarnya =====
+  const isCenter = effectiveSignatureAlignment === "center";
+  const titleWrapWidth = isCenter ? 75 : 80;
+  const leftTitleClean = effectiveLeftSignerTitle
+    .replace("Mengetahui:\n", "")
+    .replace("Mengetahui:", "")
+    .trim();
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(8.5);
+  const leftTitleLines: string[] = doc.splitTextToSize(leftTitleClean, titleWrapWidth);
+  const rightTitleLines: string[] = doc.splitTextToSize(effectiveRightSignerTitle, titleWrapWidth);
+  const titleBlockHeight = Math.max(leftTitleLines.length, rightTitleLines.length) * TITLE_LINE_HEIGHT;
+
+  const signatureHeight =
+    5 + // tanggal
+    4 + // "Mengetahui:"
+    titleBlockHeight +
+    SIGN_IMG_GAP_BEFORE +
+    signImgHeight +
+    SIGN_IMG_GAP_AFTER +
+    6; // nama + pangkat/NIP
+
+  if (finalY + signatureHeight > pageBottomLimit) {
     doc.addPage();
     drawPageHeader(doc, (doc as any).internal.getNumberOfPages());
     finalY = marginTop + 25;
   }
 
-  // Tanda Tangan
-  const isCenter = effectiveSignatureAlignment === "center";
+  // ===== Tanda Tangan =====
   const tglText = `${effectiveTempatDokumen}, ${closingDateFormatted}`;
 
   if (isCenter) {
@@ -446,23 +554,19 @@ export function generateRegisterPdf(options: GeneratePdfOptions): jsPDF {
     doc.text(tglText, rightCenterX, finalY, { align: "center" });
     finalY += 5;
 
-    // Pejabat Kiri
     doc.setFont("helvetica", "normal");
     doc.setFontSize(8.5);
     doc.text("Mengetahui:", leftCenterX, finalY, { align: "center" });
     finalY += 4;
 
+    // Jabatan kiri & kanan
     doc.setFont("helvetica", "bold");
     doc.setFontSize(8.5);
-    const leftTitleClean = effectiveLeftSignerTitle.replace("Mengetahui:\n", "").replace("Mengetahui:", "").trim();
-    const leftTitleLines = doc.splitTextToSize(leftTitleClean, 75);
     doc.text(leftTitleLines, leftCenterX, finalY, { align: "center" });
-
-    // Pejabat Kanan
-    const rightTitleLines = doc.splitTextToSize(effectiveRightSignerTitle, 75);
     doc.text(rightTitleLines, rightCenterX, finalY, { align: "center" });
 
-    const imageYCenter = finalY + SIGN_IMG_GAP_BEFORE;
+    // Gambar ttd tepat di bawah baris jabatan terakhir
+    const imageYCenter = finalY + titleBlockHeight + SIGN_IMG_GAP_BEFORE;
     if (signImgWidth > 0 && signImgHeight > 0) {
       try {
         doc.addImage(ESIGN_DATA_URL, "PNG", leftCenterX - signImgWidth / 2, imageYCenter, signImgWidth, signImgHeight, "ESIGN_STAMP_LEFT", "FAST");
@@ -504,22 +608,19 @@ export function generateRegisterPdf(options: GeneratePdfOptions): jsPDF {
     doc.text(tglText, rightX, finalY);
     finalY += 5;
 
-    // Pejabat Kiri
     doc.setFont("helvetica", "normal");
     doc.setFontSize(8.5);
     doc.text("Mengetahui:", leftX, finalY);
     finalY += 4;
 
+    // Jabatan kiri & kanan
     doc.setFont("helvetica", "bold");
     doc.setFontSize(8.5);
-    const leftTitleLines = doc.splitTextToSize(effectiveLeftSignerTitle.replace("Mengetahui:\n", "").replace("Mengetahui:", ""), 80);
     doc.text(leftTitleLines, leftX, finalY);
-
-    // Pejabat Kanan
-    const rightTitleLines = doc.splitTextToSize(effectiveRightSignerTitle, 80);
     doc.text(rightTitleLines, rightX, finalY);
 
-    const imageYLeft = finalY + SIGN_IMG_GAP_BEFORE;
+    // Gambar ttd tepat di bawah baris jabatan terakhir
+    const imageYLeft = finalY + titleBlockHeight + SIGN_IMG_GAP_BEFORE;
     if (signImgWidth > 0 && signImgHeight > 0) {
       try {
         doc.addImage(ESIGN_DATA_URL, "PNG", leftX + 20 - signImgWidth / 2, imageYLeft, signImgWidth, signImgHeight, "ESIGN_STAMP_LEFT", "FAST");
