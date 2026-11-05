@@ -4,6 +4,9 @@ import { RegisterDefinition, RegisterEntryRow, AppSettings, Officer, RegisterLoc
 import { MONTH_NAMES_ID, formatDateIndonesian, getClosingDateForPeriod } from "./date-utils.js";
 import { ESIGN_DATA_URL } from "../assets/esignBase64.js";
 
+// [F4] F4 / Folio = 215 x 330 mm (portrait). jsPDF menukar sisi otomatis untuk landscape.
+const F4_FORMAT: [number, number] = [215, 330];
+
 export interface GeneratePdfOptions {
   register: RegisterDefinition;
   entries: RegisterEntryRow[];
@@ -89,11 +92,11 @@ export function generateRegisterPdf(options: GeneratePdfOptions): jsPDF {
       ? `${MONTH_NAMES_ID[selectedMonth - 1]} ${tahunTakwim}`
       : `Tahun ${tahunTakwim}`;
 
-  // Inisialisasi dokumen jsPDF dengan kompresi aktif
+  // [F4] Inisialisasi dokumen jsPDF dengan ukuran F4 dan kompresi aktif
   const doc = new jsPDF({
     orientation: isLandscape ? "landscape" : "portrait",
     unit: "mm",
-    format: "a4",
+    format: F4_FORMAT,
     compress: true,
     putOnlyUsedFonts: true,
   });
@@ -290,7 +293,11 @@ export function generateRegisterPdf(options: GeneratePdfOptions): jsPDF {
     head: headRows,
     body: bodyRows,
     startY: startY,
-    margin: { left: marginX, right: marginX, top: marginTop + 24, bottom: marginBottom + 38 },
+    // [FIX] top = tinggi kop sebenarnya (startY), bukan angka tetap.
+    // [FIX] bottom dikecilkan: tanda tangan digambar manual setelah tabel
+    //       dan punya pengecekan addPage sendiri. Sebelumnya (marginBottom + 38)
+    //       membuat area tabel terlalu kecil -> error "row -1 ... larger than page height".
+    margin: { left: marginX, right: marginX, top: startY, bottom: marginBottom + 6 },
     theme: "plain",
     styles: {
       font: "helvetica",
@@ -311,7 +318,7 @@ export function generateRegisterPdf(options: GeneratePdfOptions): jsPDF {
       lineWidth: 0.25,
       lineColor: [40, 40, 40],
     },
-    didDrawPage: (data) => {
+    didDrawPage: (data: any) => {
       if (data.pageNumber > 1) {
         drawPageHeader(doc, data.pageNumber);
       }
