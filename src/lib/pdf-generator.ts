@@ -660,7 +660,6 @@ export function generateRegisterPdf(options: GeneratePdfOptions): jsPDF {
   doc.setFontSize(7.5);
   doc.setTextColor(100, 100, 100);
   const footnoteY = pageHeight - marginBottom;
-  doc.text(register.notes || "*) Kejaksaan ditulis hanya di sampul depan.", marginX, footnoteY);
 
   doc.setTextColor(0, 0, 0);
 

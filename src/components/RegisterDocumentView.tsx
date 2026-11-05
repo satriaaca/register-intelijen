@@ -91,6 +91,58 @@ type StorageCodeRecord = {
   keterangan?: string;
 };
 
+/*
+ * Mengubah tgl (+ waktu jika ada) menjadi timestamp untuk pengurutan.
+ * Mendukung format "YYYY-MM-DD" (ISO) dan "DD-MM-YYYY" / "DD/MM/YYYY" / "DD.MM.YYYY".
+ * Tanggal kosong / tidak terbaca -> 0 (otomatis jatuh paling bawah).
+ */
+const toEntryTimestamp = (tgl?: string | null, waktu?: string | null): number => {
+  if (!tgl) return 0;
+  const s = String(tgl).trim();
+
+  let y = 0;
+  let m = 0;
+  let d = 0;
+
+  const iso = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (iso) {
+    y = Number(iso[1]);
+    m = Number(iso[2]);
+    d = Number(iso[3]);
+  } else {
+    const idn = s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})/);
+    if (!idn) return 0;
+    d = Number(idn[1]);
+    m = Number(idn[2]);
+    y = Number(idn[3]);
+  }
+
+  let ts = Date.UTC(y, m - 1, d);
+
+  const t = String(waktu || "").match(/(\d{1,2})[:.](\d{2})/);
+  if (t) {
+    ts += (Number(t[1]) * 60 + Number(t[2])) * 60000;
+  }
+
+  return ts;
+};
+
+/*
+ * Urutan: tanggal terbaru di atas.
+ * Jika tanggal sama -> waktu terbaru, lalu nomor urut terbesar, lalu id terbesar.
+ */
+const compareLatestFirst = (a: RegisterEntryRow, b: RegisterEntryRow): number => {
+  const tb = toEntryTimestamp(b.tgl, (b as any).waktu);
+  const ta = toEntryTimestamp(a.tgl, (a as any).waktu);
+  if (tb !== ta) return tb - ta;
+
+  const nb = b.nomorUrut || 0;
+  const na = a.nomorUrut || 0;
+  if (nb !== na) return nb - na;
+
+  return b.id - a.id;
+};
+
 export const RegisterDocumentView: React.FC<RegisterDocumentViewProps> = ({
   register,
   entries,
@@ -274,12 +326,31 @@ export const RegisterDocumentView: React.FC<RegisterDocumentViewProps> = ({
       ? filterRin3EntriesByCategory(periodEntries, rin3CategoryFilter)
       : periodEntries;
 
-  // Filter pencarian teks cepat
+  /*
+   * Urutkan: tanggal terakhir (terbaru) di atas.
+   * Hasil ini dipakai untuk layar, PDF, dan penomoran tampilan.
+   */
+  const filteredEntries = React.useMemo(
+    () => [...categoryFilteredEntries].sort(compareLatestFirst),
+    [categoryFilteredEntries],
+  );
+
+  /*
+   * Nomor tampilan 1..N mengikuti urutan hasil filter + sort.
+   * (nomorUrut di database tidak diubah)
+   */
+  const displayNumberMap = React.useMemo(() => {
+    const map = new Map<number, number>();
+    filteredEntries.forEach((entry, i) => map.set(entry.id, i + 1));
+    return map;
+  }, [filteredEntries]);
+
+  // Filter pencarian teks cepat (nomor tampilan tidak bergeser saat mencari)
   const searchedEntries = React.useMemo(() => {
-    if (!searchQuery.trim()) return categoryFilteredEntries;
+    if (!searchQuery.trim()) return filteredEntries;
     const q = searchQuery.toLowerCase().trim();
-    return categoryFilteredEntries.filter((entry) => {
-      if (String(entry.nomorUrut).includes(q)) return true;
+    return filteredEntries.filter((entry) => {
+      if (String(displayNumberMap.get(entry.id) ?? "").includes(q)) return true;
       if (entry.tgl && entry.tgl.toLowerCase().includes(q)) return true;
       const dataStr = Object.values(entry.data || {})
         .filter((val) => typeof val === "string" || typeof val === "number")
@@ -287,10 +358,7 @@ export const RegisterDocumentView: React.FC<RegisterDocumentViewProps> = ({
         .toLowerCase();
       return dataStr.includes(q);
     });
-  }, [categoryFilteredEntries, searchQuery]);
-
-  // Alias filteredEntries agar fungsi PDF dan catatan penutupan tetap memakai seluruh entri periode
-  const filteredEntries = categoryFilteredEntries;
+  }, [filteredEntries, searchQuery, displayNumberMap]);
 
   // Hitung jumlah per kategori untuk R.IN.3
   const rin3CategoryCounts =
@@ -1385,6 +1453,7 @@ export const RegisterDocumentView: React.FC<RegisterDocumentViewProps> = ({
                 displayedEntries.map((entry, index) => {
                   const data = entry.data || {};
                   const isSelected = selectedEntryIds.includes(entry.id);
+                  const displayNumber = displayNumberMap.get(entry.id) ?? index + 1;
 
                   return (
                     <tr
@@ -1403,7 +1472,7 @@ export const RegisterDocumentView: React.FC<RegisterDocumentViewProps> = ({
                             checked={isSelected}
                             disabled={Boolean(currentLock?.isLocked)}
                             onChange={() => handleToggleSelectEntry(entry.id)}
-                            aria-label={`Pilih baris nomor ${entry.nomorUrut}`}
+                            aria-label={`Pilih baris nomor ${displayNumber}`}
                             className={`h-3.5 w-3.5 rounded border-slate-400 text-emerald-600 accent-emerald-600 focus:ring-emerald-500 ${
                               currentLock?.isLocked ? "cursor-not-allowed opacity-30" : "cursor-pointer"
                             }`}
@@ -1434,7 +1503,7 @@ export const RegisterDocumentView: React.FC<RegisterDocumentViewProps> = ({
                               key={column.key}
                               className="border-r border-slate-900 px-1.5 py-1.5 align-top text-center font-mono font-bold text-slate-900"
                             >
-                              {entry.nomorUrut || index + 1}
+                              {displayNumber}
                             </td>
                           );
                         }
@@ -1869,7 +1938,7 @@ export const RegisterDocumentView: React.FC<RegisterDocumentViewProps> = ({
             <p className="mb-4 text-xs leading-relaxed text-slate-600">
               Apakah Anda yakin ingin menghapus data baris{" "}
               <strong className="text-slate-900">
-                Nomor {entryToDelete.nomorUrut}
+                Nomor {displayNumberMap.get(entryToDelete.id) ?? entryToDelete.nomorUrut}
               </strong>{" "}
               dari buku register{" "}
               <strong className="text-emerald-800">{register.code}</strong>?
@@ -1931,7 +2000,7 @@ export const RegisterDocumentView: React.FC<RegisterDocumentViewProps> = ({
               <span className="font-bold text-slate-800">Nomor baris terpilih: </span>
               {filteredEntries
                 .filter((e) => selectedEntryIds.includes(e.id))
-                .map((e) => `No. ${e.nomorUrut || "-"}`)
+                .map((e) => `No. ${displayNumberMap.get(e.id) ?? "-"}`)
                 .join(", ") || `${selectedEntryIds.length} baris data`}
             </div>
 
