@@ -71,6 +71,15 @@ export const ImportCsvModal: React.FC<ImportCsvModalProps> = ({
     }
   });
 
+  // State untuk nilai default Keterangan jika tidak diisi atau bernilai 'Diproses' pada file CSV
+  const [defaultKeterangan, setDefaultKeterangan] = useState<string>(() => {
+    try {
+      const saved = localStorage.getItem("import_default_keterangan");
+      if (saved) return saved;
+    } catch {}
+    return register.code === "R.IN.5" ? "Selesai" : register.code === "R.IN.6" ? "DISIMPAN DALAM ARSIP" : "-";
+  });
+
   // Fetch Storage Code Mappings
   const fetchStorageCodes = async () => {
     try {
@@ -100,7 +109,18 @@ export const ImportCsvModal: React.FC<ImportCsvModalProps> = ({
 
     // Jika sudah ada CSV yang diinputkan, parse ulang dengan nilai default baru
     if (csvText.trim()) {
-      handleParseCsv(csvText, storageCodes, newValue);
+      handleParseCsv(csvText, storageCodes, newValue, defaultKeterangan);
+    }
+  };
+
+  const handleSetDefaultKeterangan = (newValue: string) => {
+    setDefaultKeterangan(newValue);
+    try {
+      localStorage.setItem("import_default_keterangan", newValue);
+    } catch {}
+
+    if (csvText.trim()) {
+      handleParseCsv(csvText, storageCodes, defaultDisposisiPimpinan, newValue);
     }
   };
 
@@ -108,6 +128,7 @@ export const ImportCsvModal: React.FC<ImportCsvModalProps> = ({
     rawText: string,
     currentStorageCodes = storageCodes,
     currentDefaultDisposisi = defaultDisposisiPimpinan,
+    currentDefaultKeterangan = defaultKeterangan,
   ) => {
     try {
       setErrorMessage("");
@@ -120,6 +141,7 @@ export const ImportCsvModal: React.FC<ImportCsvModalProps> = ({
 
       const transformed = transformCsvToRegister(rawGrid, register, currentStorageCodes, {
         defaultDisposisiPimpinan: currentDefaultDisposisi,
+        defaultKeterangan: currentDefaultKeterangan,
       });
 
       setParsedRows(transformed);
@@ -132,48 +154,79 @@ export const ImportCsvModal: React.FC<ImportCsvModalProps> = ({
     }
   };
 
-  // Terapkan nilai default disposisi pimpinan ke baris yang sedang aktif di pratinjau
-  const applyDefaultDisposisiToPreview = (overrideAll: boolean = false) => {
-    const defaultVal = defaultDisposisiPimpinan.trim();
-    if (!defaultVal || parsedRows.length === 0) return;
+  // Terapkan nilai default disposisi pimpinan dan keterangan ke baris yang sedang aktif di pratinjau
+  const applyDefaultsToPreview = (overrideAll: boolean = false) => {
+    const dispVal = defaultDisposisiPimpinan.trim();
+    const ketVal = defaultKeterangan.trim();
+    if (parsedRows.length === 0) return;
 
     setParsedRows((prev) =>
       prev.map((row) => {
         const currentData = { ...row.data };
-        const targetKeys = [
-          "disposisi_pimpinan",
-          "disposisiPimpinan",
-          "disposisi_tindakan",
-          "disposisi",
-        ];
-
         let modified = false;
-        targetKeys.forEach((k) => {
+
+        // Disposisi
+        if (dispVal) {
+          const targetKeys = [
+            "disposisi_pimpinan",
+            "disposisiPimpinan",
+            "disposisi_tindakan",
+            "disposisi",
+          ];
+
+          targetKeys.forEach((k) => {
+            if (k in currentData) {
+              const val = currentData[k];
+              if (
+                overrideAll ||
+                !val ||
+                val === "-" ||
+                val === "Dilaporkan Kepada Pimpinan" ||
+                (typeof val === "string" && val.toLowerCase().includes("monitor perkembangan"))
+              ) {
+                currentData[k] = dispVal;
+                modified = true;
+              }
+            }
+          });
+
+          // Khusus untuk R.IN.5 yang memiliki field disposisi_pimpinan
+          if (register.code === "R.IN.5" && (!currentData.disposisi_pimpinan || overrideAll)) {
+            currentData.disposisi_pimpinan = dispVal;
+            modified = true;
+          }
+        }
+
+        // Keterangan: Bersihkan 'Diproses' atau isi dengan nilai default
+        const ketKeys = ["keterangan", "ket"];
+        ketKeys.forEach((k) => {
           if (k in currentData) {
             const val = currentData[k];
             if (
               overrideAll ||
               !val ||
-              val === "-" ||
-              val === "Dilaporkan Kepada Pimpinan" ||
-              (typeof val === "string" && val.toLowerCase().includes("monitor perkembangan"))
+              (typeof val === "string" && val.toLowerCase() === "diproses") ||
+              (ketVal && val === "-")
             ) {
-              currentData[k] = defaultVal;
+              currentData[k] =
+                ketVal ||
+                (register.code === "R.IN.5"
+                  ? "Selesai"
+                  : register.code === "R.IN.6"
+                  ? "DISIMPAN DALAM ARSIP"
+                  : "-");
               modified = true;
             }
           }
         });
 
-        // Khusus untuk R.IN.5 yang memiliki field disposisi_pimpinan
-        if (register.code === "R.IN.5" && (!currentData.disposisi_pimpinan || overrideAll)) {
-          currentData.disposisi_pimpinan = defaultVal;
-          modified = true;
-        }
-
         return modified ? { ...row, data: currentData } : row;
       }),
     );
   };
+
+  // Alias untuk kompatibilitas
+  const applyDefaultDisposisiToPreview = applyDefaultsToPreview;
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -488,57 +541,90 @@ export const ImportCsvModal: React.FC<ImportCsvModalProps> = ({
 
             {previewTab === "input" ? (
               <div className="space-y-4">
-                {/* Default Disposisi Pimpinan Configuration Card */}
-                <div className="bg-gradient-to-r from-emerald-50/80 via-teal-50/60 to-emerald-50/80 border border-emerald-200 rounded-xl p-3.5 sm:p-4 shadow-xs space-y-2.5">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
+                {/* Default Disposisi Pimpinan & Keterangan Configuration Card */}
+                <div className="bg-gradient-to-r from-emerald-50/80 via-teal-50/60 to-emerald-50/80 border border-emerald-200 rounded-xl p-3.5 sm:p-4 shadow-xs space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-emerald-200/70 pb-2">
                     <div className="flex items-center gap-2.5">
                       <div className="w-8 h-8 rounded-lg bg-emerald-700 text-white flex items-center justify-center font-bold text-xs shadow-2xs">
-                        DP
+                        CFG
                       </div>
                       <div>
-                        <label htmlFor="input-default-disposisi" className="text-xs font-bold text-slate-800 flex items-center gap-2">
-                          <span>Nilai Default Disposisi Pimpinan (Jika Kosong di CSV)</span>
+                        <h4 className="text-xs font-bold text-slate-800 flex items-center gap-2">
+                          <span>Konfigurasi Default Impor Register</span>
                           <span className="text-[10px] font-semibold text-emerald-800 bg-emerald-100 border border-emerald-300 px-2 py-0.5 rounded-full">
-                            Aktif Otomatis
+                            Pembersihan Otomatis Aktif
                           </span>
-                        </label>
+                        </h4>
                         <p className="text-[11px] text-slate-600">
-                          Jika kolom disposisi pimpinan pada berkas CSV tidak diisi/kosong, baris impor akan otomatis diset ke nilai ini (misal: <strong>"Arsip"</strong>).
+                          Mengisi kolom kosong serta otomatis mengganti status aplikasi persuratan (<code className="text-red-700 font-bold bg-white px-1.5 py-0.2 rounded border border-red-200">"Diproses"</code>) dengan nilai register yang sah.
                         </p>
                       </div>
                     </div>
                   </div>
 
-                  <div className="flex flex-wrap items-center gap-2 pt-1">
-                    <div className="flex-1 min-w-[220px]">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 pt-0.5">
+                    {/* Disposisi Pimpinan Field */}
+                    <div className="space-y-1.5">
+                      <label htmlFor="input-default-disposisi" className="text-xs font-bold text-slate-700 flex items-center justify-between">
+                        <span>Disposisi Pimpinan Default:</span>
+                        <span className="text-[10px] font-normal text-slate-500">Jika kosong di CSV</span>
+                      </label>
                       <input
                         id="input-default-disposisi"
                         type="text"
                         value={defaultDisposisiPimpinan}
                         onChange={(e) => handleSetDefaultDisposisi(e.target.value)}
-                        placeholder="Ketik nilai default, misal: Arsip"
-                        className="w-full text-xs font-semibold px-3 py-2 bg-white border border-emerald-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none text-slate-900 shadow-2xs"
+                        placeholder="Misal: Arsip"
+                        className="w-full text-xs font-semibold px-3 py-1.5 bg-white border border-emerald-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none text-slate-900 shadow-2xs"
                       />
-                    </div>
-
-                    {/* Quick Preset Buttons */}
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      {["Arsip", "Dilaporkan Kepada Pimpinan", "Ditindaklanjuti dan monitor perkembangan", "Selesai"].map(
-                        (preset) => (
+                      <div className="flex flex-wrap items-center gap-1 pt-0.5">
+                        {["Arsip", "Dilaporkan Kepada Pimpinan", "Ditindaklanjuti dan monitor perkembangan", "Selesai"].map((p) => (
                           <button
-                            key={preset}
+                            key={p}
                             type="button"
-                            onClick={() => handleSetDefaultDisposisi(preset)}
-                            className={`px-2.5 py-1 text-[11px] font-medium rounded-lg border transition cursor-pointer ${
-                              defaultDisposisiPimpinan === preset
+                            onClick={() => handleSetDefaultDisposisi(p)}
+                            className={`px-2 py-0.5 text-[10px] rounded border transition cursor-pointer ${
+                              defaultDisposisiPimpinan === p
                                 ? "bg-emerald-700 text-white border-emerald-800 shadow-2xs font-bold"
-                                : "bg-white text-slate-700 border-slate-300 hover:bg-emerald-50 hover:text-emerald-800 hover:border-emerald-300"
+                                : "bg-white text-slate-700 border-slate-300 hover:bg-emerald-50 hover:text-emerald-800"
                             }`}
                           >
-                            {preset === "Arsip" ? "📁 Arsip" : preset}
+                            {p === "Arsip" ? "📁 Arsip" : p}
                           </button>
-                        ),
-                      )}
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Keterangan Field */}
+                    <div className="space-y-1.5">
+                      <label htmlFor="input-default-keterangan" className="text-xs font-bold text-slate-700 flex items-center justify-between">
+                        <span>Keterangan Register:</span>
+                        <span className="text-[10px] font-semibold text-emerald-800">Gantikan "Diproses"</span>
+                      </label>
+                      <input
+                        id="input-default-keterangan"
+                        type="text"
+                        value={defaultKeterangan}
+                        onChange={(e) => handleSetDefaultKeterangan(e.target.value)}
+                        placeholder={register.code === "R.IN.5" ? "Selesai" : "-"}
+                        className="w-full text-xs font-semibold px-3 py-1.5 bg-white border border-emerald-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none text-slate-900 shadow-2xs"
+                      />
+                      <div className="flex flex-wrap items-center gap-1 pt-0.5">
+                        {["Selesai", "Arsip", "-", "DISIMPAN DALAM ARSIP"].map((p) => (
+                          <button
+                            key={p}
+                            type="button"
+                            onClick={() => handleSetDefaultKeterangan(p)}
+                            className={`px-2 py-0.5 text-[10px] rounded border transition cursor-pointer ${
+                              defaultKeterangan === p
+                                ? "bg-emerald-700 text-white border-emerald-800 shadow-2xs font-bold"
+                                : "bg-white text-slate-700 border-slate-300 hover:bg-emerald-50 hover:text-emerald-800"
+                            }`}
+                          >
+                            {p === "Selesai" ? "✓ Selesai" : p}
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -629,54 +715,63 @@ export const ImportCsvModal: React.FC<ImportCsvModalProps> = ({
                   </span>
                 </div>
 
-                {/* Quick Disposisi Control Bar in Preview */}
-                <div className="flex flex-wrap items-center justify-between gap-2.5 bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-50 border border-emerald-200 p-2.5 sm:p-3 rounded-lg text-xs">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-bold text-emerald-950 flex items-center gap-1.5">
-                      <span className="w-5 h-5 rounded bg-emerald-700 text-white flex items-center justify-center text-[10px] font-bold">
-                        DP
-                      </span>
-                      <span>Disposisi Pimpinan Default:</span>
-                    </span>
-                    <input
-                      type="text"
-                      value={defaultDisposisiPimpinan}
-                      onChange={(e) => handleSetDefaultDisposisi(e.target.value)}
-                      placeholder="Misal: Arsip"
-                      className="text-xs font-semibold px-2.5 py-1 bg-white border border-emerald-300 rounded-md focus:ring-2 focus:ring-emerald-500 focus:outline-none text-slate-800 min-w-[140px] shadow-2xs"
-                    />
+                {/* Quick Disposisi & Keterangan Control Bar in Preview */}
+                <div className="flex flex-wrap items-center justify-between gap-2.5 bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-50 border border-emerald-200 p-2.5 sm:p-3 rounded-lg text-xs shadow-2xs">
+                  <div className="flex flex-wrap items-center gap-3">
+                    {/* Disposisi */}
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-bold text-emerald-950 text-[11px] whitespace-nowrap">Disposisi Pimpinan:</span>
+                      <input
+                        type="text"
+                        value={defaultDisposisiPimpinan}
+                        onChange={(e) => handleSetDefaultDisposisi(e.target.value)}
+                        placeholder="Misal: Arsip"
+                        className="text-xs font-semibold px-2 py-1 bg-white border border-emerald-300 rounded-md focus:ring-2 focus:ring-emerald-500 focus:outline-none text-slate-800 w-[110px] shadow-2xs"
+                      />
+                    </div>
+
+                    {/* Keterangan */}
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-bold text-emerald-950 text-[11px] whitespace-nowrap">Keterangan:</span>
+                      <input
+                        type="text"
+                        value={defaultKeterangan}
+                        onChange={(e) => handleSetDefaultKeterangan(e.target.value)}
+                        placeholder={register.code === "R.IN.5" ? "Selesai" : "-"}
+                        className="text-xs font-semibold px-2 py-1 bg-white border border-emerald-300 rounded-md focus:ring-2 focus:ring-emerald-500 focus:outline-none text-slate-800 w-[110px] shadow-2xs"
+                      />
+                    </div>
+
+                    {/* Quick Preset Combos */}
                     <div className="flex items-center gap-1">
-                      {["Arsip", "Dilaporkan Kepada Pimpinan", "Ditindaklanjuti", "Selesai"].map((p) => (
-                        <button
-                          key={p}
-                          type="button"
-                          onClick={() => handleSetDefaultDisposisi(p)}
-                          className={`px-2 py-0.5 text-[10px] rounded border transition cursor-pointer ${
-                            defaultDisposisiPimpinan === p
-                              ? "bg-emerald-700 text-white font-bold border-emerald-800 shadow-2xs"
-                              : "bg-white text-slate-700 border-slate-300 hover:bg-emerald-100"
-                          }`}
-                        >
-                          {p === "Arsip" ? "📁 Arsip" : p}
-                        </button>
-                      ))}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          handleSetDefaultDisposisi("Arsip");
+                          handleSetDefaultKeterangan("Selesai");
+                        }}
+                        className="px-2 py-0.5 text-[10px] font-semibold text-emerald-800 bg-white hover:bg-emerald-100 border border-emerald-300 rounded cursor-pointer shadow-2xs"
+                        title="Set Disposisi='Arsip' & Keterangan='Selesai'"
+                      >
+                        📁 Arsip + Selesai
+                      </button>
                     </div>
                   </div>
 
                   <div className="flex items-center gap-1.5">
                     <button
                       type="button"
-                      onClick={() => applyDefaultDisposisiToPreview(false)}
+                      onClick={() => applyDefaultsToPreview(false)}
                       className="px-2.5 py-1 text-[11px] font-bold text-emerald-900 bg-white border border-emerald-300 hover:bg-emerald-100 rounded-md transition cursor-pointer shadow-2xs"
-                      title="Isi baris yang kolom disposisinya kosong atau bernilai default dengan nilai ini"
+                      title="Ganti baris yang kolom disposisinya kosong dan kolom keterangan yang bernilai 'Diproses' dengan nilai default"
                     >
-                      Terapkan ke Baris Kosong
+                      Bersihkan "Diproses" & Terapkan Default
                     </button>
                     <button
                       type="button"
-                      onClick={() => applyDefaultDisposisiToPreview(true)}
+                      onClick={() => applyDefaultsToPreview(true)}
                       className="px-2.5 py-1 text-[11px] font-semibold text-slate-700 bg-white border border-slate-300 hover:bg-slate-100 rounded-md transition cursor-pointer"
-                      title="Ganti seluruh nilai disposisi pimpinan pada pratinjau dengan nilai ini"
+                      title="Ganti seluruh nilai disposisi dan keterangan pada pratinjau dengan nilai ini"
                     >
                       Terapkan ke Semua Baris
                     </button>

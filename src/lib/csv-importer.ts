@@ -10,6 +10,12 @@ export interface TransformCsvOptions {
    * Contoh: "Arsip"
    */
   defaultDisposisiPimpinan?: string;
+
+  /**
+   * Nilai default untuk kolom keterangan jika kosong atau bernilai status aplikasi 'Diproses' di CSV.
+   * Contoh: "Selesai" (pada R.IN.5) atau "Arsip" atau "-"
+   */
+  defaultKeterangan?: string;
 }
 
 /**
@@ -328,6 +334,25 @@ function getNomorUrut(
 }
 
 /**
+ * Helper untuk menormalkan isi kolom keterangan:
+ * Menghilangkan status aplikasi eksternal "Diproses" dan menggantinya dengan nilai register yang sah.
+ */
+export function resolveKeteranganValue(
+  rawVal: string,
+  fallbackDefault: string = "-",
+  userOverride?: string,
+): string {
+  if (userOverride !== undefined && userOverride.trim() !== "") {
+    return userOverride.trim();
+  }
+  const clean = (rawVal || "").trim();
+  if (!clean || clean === "-" || clean.toLowerCase() === "diproses") {
+    return fallbackDefault;
+  }
+  return clean;
+}
+
+/**
  * Helper to clean and split the 'Hal' / 'Perihal' column.
  * Handles formats like:
  * - "Lapinhar Perihal - Pelaksanaan Rekrutmen Dokter..."
@@ -370,7 +395,10 @@ export function parseHalField(hal: string): {
 /**
  * Transform CSV to R.IN.1.
  */
-export function transformCsvToRIn1(rows: string[][]): Array<{
+export function transformCsvToRIn1(
+  rows: string[][],
+  options?: TransformCsvOptions,
+): Array<{
   nomorUrut: number;
   tgl: string;
   waktu?: string;
@@ -436,7 +464,7 @@ export function transformCsvToRIn1(rows: string[][]): Array<{
         perihal: uraianMasalah || rawHal.trim(),
         tgl_isi_disposisi: disposisiText,
         tindak_lanjut: "DITINDAKLANJUTI DAN DIARSIPKAN",
-        keterangan: rawStatus.trim() || "-",
+        keterangan: resolveKeteranganValue(rawStatus, "-", options?.defaultKeterangan),
       },
     });
   }
@@ -456,7 +484,10 @@ export function transformCsvToRIn1(rows: string[][]): Array<{
  * - Tindak lanjut = isi Hal sebelum "-" + nomor surat lengkap.
  * - Hal yang berawalan "Laporan Bulanan" atau "Surat Pengantar" diabaikan.
  */
-export function transformCsvToRIn3(rows: string[][]): Array<{
+export function transformCsvToRIn3(
+  rows: string[][],
+  options?: TransformCsvOptions,
+): Array<{
   nomorUrut: number;
   tgl: string;
   waktu?: string;
@@ -537,7 +568,7 @@ export function transformCsvToRIn3(rows: string[][]): Array<{
         catatan: "-",
         disposisi_tindakan: "Dilaporkan Kepada Pimpinan",
         tindak_lanjut: tindakLanjut,
-        keterangan: rawStatus.trim() || "-",
+        keterangan: resolveKeteranganValue(rawStatus, "-", options?.defaultKeterangan),
       },
     });
   }
@@ -551,6 +582,7 @@ export function transformCsvToRIn3(rows: string[][]): Array<{
 export function transformCsvToRIn6(
   rows: string[][],
   storageCodeMappings: StorageCodeMapping[] = [],
+  options?: TransformCsvOptions,
 ): Array<{
   nomorUrut: number;
   tgl: string;
@@ -660,7 +692,7 @@ export function transformCsvToRIn6(
         perihal: uraianMasalah || rawHal.trim(),
         lampiran: "-",
         kode_penyimpanan: kodePenyimpanan,
-        keterangan: rawStatus.trim() || "DISIMPAN DALAM ARSIP",
+        keterangan: resolveKeteranganValue(rawStatus, "DISIMPAN DALAM ARSIP", options?.defaultKeterangan),
       },
     });
   }
@@ -696,7 +728,10 @@ export function getRegisterLeafColumns(register: RegisterDefinition): Array<{
 /**
  * Transform CSV to R.IN.2 (Register Surat Keluar Biasa/Rahasia).
  */
-export function transformCsvToRIn2(rows: string[][]): Array<{
+export function transformCsvToRIn2(
+  rows: string[][],
+  options?: TransformCsvOptions,
+): Array<{
   nomorUrut: number;
   tgl: string;
   waktu?: string;
@@ -774,7 +809,7 @@ export function transformCsvToRIn2(rows: string[][]): Array<{
         kepada: rawKepada.trim() || "Kepala Kejaksaan Tinggi Bali",
         perihal: rawHal.trim() || "-",
         lampiran: rawLampiran.trim() || "-",
-        keterangan: rawKet.trim() || "Terkirim",
+        keterangan: resolveKeteranganValue(rawKet, "Terkirim", options?.defaultKeterangan),
       },
     });
   }
@@ -1034,7 +1069,7 @@ export function transformCsvToRIn5(
         subdit_seksi: subditSeksi,
         perihal: uraianMasalah || hal,
         disposisi_pimpinan: disposisiPimpinan,
-        keterangan: rawKet.trim() || "Selesai",
+        keterangan: resolveKeteranganValue(rawKet, "Selesai", options?.defaultKeterangan),
       },
     });
   }
@@ -1571,6 +1606,18 @@ export function transformCsvGeneric(
         val = options.defaultDisposisiPimpinan.trim();
       }
 
+      // Check if default keterangan should apply or if value is 'Diproses'
+      const isKeteranganKey = leaf.key === "keterangan" || leaf.key === "ket";
+      if (isKeteranganKey) {
+        const fallbackDefault =
+          register.code === "R.IN.5"
+            ? "Selesai"
+            : register.code === "R.IN.6"
+            ? "DISIMPAN DALAM ARSIP"
+            : "-";
+        val = resolveKeteranganValue(val, fallbackDefault, options?.defaultKeterangan);
+      }
+
       rowData[leaf.key] = val || "-";
     });
 
@@ -1611,13 +1658,13 @@ export function transformCsvToRegister(
   data: Record<string, any>;
 }> {
   if (register.code === "R.IN.1") {
-    return transformCsvToRIn1(rows);
+    return transformCsvToRIn1(rows, options);
   }
   if (register.code === "R.IN.2") {
-    return transformCsvToRIn2(rows);
+    return transformCsvToRIn2(rows, options);
   }
   if (register.code === "R.IN.3") {
-    return transformCsvToRIn3(rows);
+    return transformCsvToRIn3(rows, options);
   }
   if (register.code === "R.IN.4") {
     return transformCsvToRIn4(rows);
@@ -1626,7 +1673,7 @@ export function transformCsvToRegister(
     return transformCsvToRIn5(rows, options);
   }
   if (register.code === "R.IN.6") {
-    return transformCsvToRIn6(rows, storageCodeMappings);
+    return transformCsvToRIn6(rows, storageCodeMappings, options);
   }
   if (register.code === "R.IN.17") {
     return transformCsvToRIn17(rows);

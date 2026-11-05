@@ -85,5 +85,20 @@ describe("csv-importer", () => {
       expect(result).toHaveLength(1);
       expect(result[0].data.disposisi_pimpinan).toBe("Arsip");
     });
+
+    it("should clean up 'Diproses' in Keterangan and replace with default 'Selesai' or custom defaultKeterangan", () => {
+      const rows = [
+        ["No", "Tanggal", "Nomor", "Asal", "Hal", "Status"],
+        ["1", "2026-08-10", "R-10/N.1.17/Dsb.4/08/2026", "Seksi Intelijen", "Laporan Pemantauan", "Diproses"],
+      ];
+
+      // Default without custom override should be "Selesai" (not "Diproses")
+      const result1 = transformCsvToRIn5(rows, { defaultDisposisiPimpinan: "Arsip" });
+      expect(result1[0].data.keterangan).toBe("Selesai");
+
+      // Custom override (e.g. "Arsip")
+      const result2 = transformCsvToRIn5(rows, { defaultDisposisiPimpinan: "Arsip", defaultKeterangan: "Arsip" });
+      expect(result2[0].data.keterangan).toBe("Arsip");
+    });
   });
 });
