@@ -22,6 +22,11 @@ const MAX_COL_SHARE = 0.3; // 1 kolom maksimal 30% lebar konten
 
 export interface GeneratePdfOptions {
   register: RegisterDefinition;
+  /**
+   * Entri HARUS sudah terurut (tanggal terbaru di atas) dan sudah terfilter.
+   * Kolom "No" di PDF diberi nomor 1..N sesuai urutan array ini,
+   * sehingga sama persis dengan nomor tampilan di layar.
+   */
   entries: RegisterEntryRow[];
   settings: AppSettings;
   officers: Officer[];
@@ -235,7 +240,8 @@ export function generateRegisterPdf(options: GeneratePdfOptions): jsPDF {
         } else {
           let val = "";
           if (col.key === "no") {
-            val = String(entry.nomorUrut || index + 1);
+            // Nomor urut tampilan: 1..N sesuai urutan entri (tanggal terbaru di atas)
+            val = String(index + 1);
           } else if (col.type === "officer_multi" || col.type === "officer_single") {
             val = formatOfficerNames(rowData[col.key]);
           } else {

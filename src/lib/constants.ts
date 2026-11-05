@@ -255,7 +255,7 @@ export const REGISTER_DEFINITIONS: RegisterDefinition[] = [
     notes: "*) Kejaksaan ditulis hanya di sampul depan. **) Diisi nama struktural sesuai pengisian kolom 4.",
     columns: [
       { key: "no", label: "NO.", colNumber: 1, type: "number", widthPercent: 5 },
-      { key: "jenis_produk", label: "JENIS PRODUK INTELIJEN", colNumber: 2, type: "select", options: ["Telaahan Intelijen", "Laporan Informasi Harian (LIH)", "Laporan Informasi Khusus (LIK)", "Laporan Hasil Operasi (LHO)", "Laporan Atensi", "Petunjuk Intelijen"] },
+      { key: "jenis_produk", label: "JENIS PRODUK INTELIJEN", colNumber: 2, type: "select", options: ["Telaahan Intelijen", "Surat Perintah Tugas(IN.1)","Surat Perintah Pengamanan Pembangunan Strategis(PPS)(IN.2)","Surat Perintah Operasi Intelijen(IN.3)","Surat Perintah (Kegiatan Penerangan Hukum)(IN.21)"] },
       { key: "nomor_tgl_produk", label: "NOMOR DAN TANGGAL PRODUK INTELIJEN", colNumber: 3, type: "text" },
       { key: "subdit_seksi", label: "SUBDIT/SEKSI/SUBSEKSI", colNumber: 4, type: "text" },
       { key: "perihal", label: "PERIHAL", colNumber: 5, type: "textarea" },
