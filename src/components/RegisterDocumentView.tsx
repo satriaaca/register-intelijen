@@ -19,6 +19,12 @@ import {
   Filter,
   Layers,
   ShieldCheck,
+  Search,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
+  X,
 } from "lucide-react";
 import jsPDF from "jspdf";
 
@@ -129,6 +135,11 @@ export const RegisterDocumentView: React.FC<RegisterDocumentViewProps> = ({
 
   // Filter Kategori Khusus R.IN.3
   const [rin3CategoryFilter, setRin3CategoryFilter] = useState<Rin3CategoryType | "all">("all");
+
+  // Pencarian Cepat & Paginasi untuk Performa Tinggi & Skalabilitas Ribuan Baris
+  const [searchQuery, setSearchQuery] = useState<string>("");
+  const [pageSize, setPageSize] = useState<number | "all">(50);
+  const [currentPage, setCurrentPage] = useState<number>(1);
 
   // State Fitur Lock Register (Kunci Penandatangan)
   const [currentLock, setCurrentLock] = useState<RegisterLock | null>(null);
@@ -258,16 +269,52 @@ export const RegisterDocumentView: React.FC<RegisterDocumentViewProps> = ({
   );
 
   // Filter khusus kategori pada R.IN.3
-  const filteredEntries =
+  const categoryFilteredEntries =
     register.code === "R.IN.3"
       ? filterRin3EntriesByCategory(periodEntries, rin3CategoryFilter)
       : periodEntries;
+
+  // Filter pencarian teks cepat
+  const searchedEntries = React.useMemo(() => {
+    if (!searchQuery.trim()) return categoryFilteredEntries;
+    const q = searchQuery.toLowerCase().trim();
+    return categoryFilteredEntries.filter((entry) => {
+      if (String(entry.nomorUrut).includes(q)) return true;
+      if (entry.tgl && entry.tgl.toLowerCase().includes(q)) return true;
+      const dataStr = Object.values(entry.data || {})
+        .filter((val) => typeof val === "string" || typeof val === "number")
+        .join(" ")
+        .toLowerCase();
+      return dataStr.includes(q);
+    });
+  }, [categoryFilteredEntries, searchQuery]);
+
+  // Alias filteredEntries agar fungsi PDF dan catatan penutupan tetap memakai seluruh entri periode
+  const filteredEntries = categoryFilteredEntries;
 
   // Hitung jumlah per kategori untuk R.IN.3
   const rin3CategoryCounts =
     register.code === "R.IN.3"
       ? countRin3EntriesByCategory(periodEntries)
       : { all: periodEntries.length };
+
+  // Total Halaman
+  const totalPages =
+    pageSize === "all"
+      ? 1
+      : Math.max(1, Math.ceil(searchedEntries.length / (pageSize as number)));
+
+  // Reset halaman saat periode, filter, atau pencarian berubah
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [selectedYear, selectedMonth, rin3CategoryFilter, searchQuery, pageSize]);
+
+  // Baris yang dirender di layar (hanya 50/100 baris, bukan ribuan baris sekaligus!)
+  const displayedEntries = React.useMemo(() => {
+    if (pageSize === "all") return searchedEntries;
+    const start = (currentPage - 1) * (pageSize as number);
+    return searchedEntries.slice(start, start + (pageSize as number));
+  }, [searchedEntries, currentPage, pageSize]);
 
   // Data Penandatangan Efektif (Snapshot jika terkunci, atau global jika tidak)
   const effectiveLeftSignerTitle =
@@ -438,22 +485,24 @@ export const RegisterDocumentView: React.FC<RegisterDocumentViewProps> = ({
     }
   };
 
-  const filteredEntryIds = filteredEntries.map((entry) => entry.id);
+  const allPeriodEntryIds = filteredEntries.map((entry) => entry.id);
+  const filteredEntryIds = allPeriodEntryIds;
+  const displayedEntryIds = displayedEntries.map((entry) => entry.id);
   const isAllSelected =
-    filteredEntries.length > 0 &&
-    filteredEntries.every((entry) => selectedEntryIds.includes(entry.id));
+    displayedEntries.length > 0 &&
+    displayedEntries.every((entry) => selectedEntryIds.includes(entry.id));
   const isSomeSelected =
-    selectedEntryIds.length > 0 && !isAllSelected;
+    displayedEntries.some((entry) => selectedEntryIds.includes(entry.id)) && !isAllSelected;
 
   const handleToggleSelectAll = () => {
     if (currentLock?.isLocked) return;
     if (isAllSelected) {
       setSelectedEntryIds((prev) =>
-        prev.filter((id) => !filteredEntryIds.includes(id)),
+        prev.filter((id) => !displayedEntryIds.includes(id)),
       );
     } else {
       setSelectedEntryIds((prev) =>
-        Array.from(new Set([...prev, ...filteredEntryIds])),
+        Array.from(new Set([...prev, ...displayedEntryIds])),
       );
     }
   };
@@ -938,6 +987,28 @@ export const RegisterDocumentView: React.FC<RegisterDocumentViewProps> = ({
             <span>Unduh PDF Periode</span>
           </button>
 
+          {/* Input Pencarian Cepat */}
+          <div className="relative flex items-center">
+            <Search className="pointer-events-none absolute left-2.5 h-3.5 w-3.5 text-slate-400" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Cari nomor, perihal, isi..."
+              className="w-36 sm:w-56 rounded border border-slate-300 bg-white py-1.5 pl-8 pr-7 text-xs text-slate-800 placeholder-slate-400 shadow-2xs transition focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery("")}
+                className="absolute right-2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                title="Hapus pencarian"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            )}
+          </div>
+
           {selectedEntryIds.length > 0 && !currentLock?.isLocked && (
             <button
               id="btn-multi-delete-toolbar"
@@ -1284,7 +1355,7 @@ export const RegisterDocumentView: React.FC<RegisterDocumentViewProps> = ({
             </thead>
 
             <tbody className="divide-y divide-slate-900">
-              {filteredEntries.length === 0 ? (
+              {displayedEntries.length === 0 ? (
                 /* 10 Baris Kosong Bergaris/Border */
                 Array.from({ length: 10 }).map((_, rowIndex) => (
                   <tr
@@ -1311,7 +1382,7 @@ export const RegisterDocumentView: React.FC<RegisterDocumentViewProps> = ({
                   </tr>
                 ))
               ) : (
-                filteredEntries.map((entry, index) => {
+                displayedEntries.map((entry, index) => {
                   const data = entry.data || {};
                   const isSelected = selectedEntryIds.includes(entry.id);
 
@@ -1450,6 +1521,121 @@ export const RegisterDocumentView: React.FC<RegisterDocumentViewProps> = ({
             </div>
           )}
         </div>
+
+        {/* Kontrol Paginasi & Kinerja Viewer Ribuan Baris */}
+        {searchedEntries.length > 0 && (
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-300 bg-white px-3.5 py-2 text-xs shadow-xs">
+            <div className="flex flex-wrap items-center gap-2 text-slate-700">
+              <span className="font-medium">
+                Menampilkan{" "}
+                <strong className="text-slate-900 font-mono">
+                  {pageSize === "all"
+                    ? 1
+                    : Math.min(
+                        searchedEntries.length,
+                        (currentPage - 1) * (pageSize as number) + 1,
+                      )}
+                </strong>{" "}
+                –{" "}
+                <strong className="text-slate-900 font-mono">
+                  {pageSize === "all"
+                    ? searchedEntries.length
+                    : Math.min(
+                        searchedEntries.length,
+                        currentPage * (pageSize as number),
+                      )}
+                </strong>{" "}
+                dari{" "}
+                <strong className="text-emerald-800 font-mono">
+                  {searchedEntries.length} baris
+                </strong>
+                {searchQuery.trim() && (
+                  <span className="text-[11px] text-slate-500">
+                    {" "}
+                    (difilter dari {categoryFilteredEntries.length} total)
+                  </span>
+                )}
+              </span>
+
+              <div className="ml-2 flex items-center gap-1.5 border-l border-slate-200 pl-3">
+                <span className="text-slate-500 text-[11px]">Baris per halaman:</span>
+                <select
+                  value={pageSize}
+                  onChange={(e) => {
+                    const val = e.target.value === "all" ? "all" : Number(e.target.value);
+                    setPageSize(val);
+                    setCurrentPage(1);
+                  }}
+                  className="rounded border border-slate-300 bg-slate-50 px-2 py-0.5 text-xs font-semibold text-slate-800 focus:border-emerald-500 focus:outline-none cursor-pointer"
+                >
+                  <option value={50}>50</option>
+                  <option value={100}>100</option>
+                  <option value={250}>250</option>
+                  <option value={500}>500</option>
+                  <option value="all">Semua</option>
+                </select>
+              </div>
+            </div>
+
+            {pageSize !== "all" && totalPages > 1 && (
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage(1)}
+                  disabled={currentPage === 1}
+                  title="Halaman Pertama"
+                  className="rounded border border-slate-300 p-1 text-slate-600 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer transition"
+                >
+                  <ChevronsLeft className="h-3.5 w-3.5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                  title="Halaman Sebelumnya"
+                  className="rounded border border-slate-300 p-1 text-slate-600 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer transition"
+                >
+                  <ChevronLeft className="h-3.5 w-3.5" />
+                </button>
+
+                <div className="flex items-center gap-1 px-2 text-[11px] font-semibold text-slate-700">
+                  <span>Halaman</span>
+                  <input
+                    type="number"
+                    min={1}
+                    max={totalPages}
+                    value={currentPage}
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value, 10);
+                      if (val >= 1 && val <= totalPages) setCurrentPage(val);
+                    }}
+                    className="w-12 rounded border border-slate-300 px-1 py-0.5 text-center font-mono font-bold text-slate-900 focus:border-emerald-500 focus:outline-none"
+                  />
+                  <span>dari {totalPages}</span>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={currentPage === totalPages}
+                  title="Halaman Berikutnya"
+                  className="rounded border border-slate-300 p-1 text-slate-600 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer transition"
+                >
+                  <ChevronRight className="h-3.5 w-3.5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage(totalPages)}
+                  disabled={currentPage === totalPages}
+                  title="Halaman Terakhir"
+                  className="rounded border border-slate-300 p-1 text-slate-600 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer transition"
+                >
+                  <ChevronsRight className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            )}
+          </div>
+        )}
 
         <div className="mt-4 rounded border border-slate-300 bg-slate-50 p-2.5 text-xs text-slate-800">
           <p className="text-[11px] font-semibold italic leading-relaxed">

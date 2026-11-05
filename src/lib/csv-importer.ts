@@ -838,13 +838,22 @@ export function transformCsvToRIn4(rows: string[][]): Array<{
 }> {
   if (rows.length < 2) return [];
 
-  const headers = rows[0].map((h) => h.toLowerCase().trim());
-  const { noIdx, tanggalIdx, nomorSuratIdx, asalIdx, halIdx } = getStandardCsvColumnIndexes(headers);
+  // Normalisasi header: lowercase, ganti _ dan . jadi spasi, rapikan spasi ganda
+  const normalizeHeader = (h: string) =>
+    h.toLowerCase().replace(/[_.]/g, " ").replace(/\s+/g, " ").trim();
+
+  const headers = rows[0].map(normalizeHeader);
+  const { noIdx, tanggalIdx, nomorSuratIdx, asalIdx, halIdx } =
+    getStandardCsvColumnIndexes(headers);
 
   const noTglSuratIdx = findColumnIndex(headers, [
+    (h) => h === "nomor dan tanggal",
+    (h) => h === "nomor dan tgl",
+    (h) => h === "no dan tgl",
     (h) => h === "no dan tgl surat",
-    (h) => h === "no_tgl_surat",
     (h) => h === "tgl dan no surat",
+    (h) => h.includes("nomor") && h.includes("tanggal"),
+    (h) => h.includes("no") && h.includes("tgl"),
     (h) => h.includes("no") && h.includes("surat"),
   ]);
 
@@ -862,13 +871,13 @@ export function transformCsvToRIn4(rows: string[][]): Array<{
 
   const waktuIdx = findColumnIndex(headers, [
     (h) => h === "waktu",
-    (h) => h === "waktu_terima",
+    (h) => h === "waktu terima",
     (h) => h === "jam",
   ]);
 
   const namaParafIdx = findColumnIndex(headers, [
     (h) => h === "nama dan paraf",
-    (h) => h === "nama_paraf",
+    (h) => h === "nama paraf",
     (h) => h.includes("paraf"),
     (h) => h.includes("penerima"),
   ]);
@@ -891,9 +900,14 @@ export function transformCsvToRIn4(rows: string[][]): Array<{
     if (row.length === 0 || row.every((cell) => !cell.trim())) continue;
 
     const rawNo = getCell(row, noIdx);
-    const rawTanggal = getCell(row, tanggalIdx);
-    const rawNomor = getCell(row, nomorSuratIdx);
     const rawNoTgl = getCell(row, noTglSuratIdx);
+
+    // Jangan pakai kolom gabungan sebagai nomor/tanggal terpisah
+    const rawTanggal =
+      tanggalIdx !== noTglSuratIdx ? getCell(row, tanggalIdx) : "";
+    const rawNomor =
+      nomorSuratIdx !== noTglSuratIdx ? getCell(row, nomorSuratIdx) : "";
+
     const rawKepada = getCell(row, kepadaIdx) || getCell(row, asalIdx);
     const rawHal = getCell(row, halIdx);
     const rawLampiran = getCell(row, lampiranIdx);
@@ -902,8 +916,17 @@ export function transformCsvToRIn4(rows: string[][]): Array<{
     const rawKet = getCell(row, ketIdx);
 
     const nomorUrut = getNomorUrut(rawNo, result.length + 1);
-    const isoDate = normalizeDateToIso(rawTanggal);
-    const randomJam = getRandomTimeBetween(9, 15);
+
+    // Tanggal: dari kolom tanggal, fallback ambil dari string gabungan
+    let isoDate = normalizeDateToIso(rawTanggal);
+    if (!isoDate && rawNoTgl) {
+      // contoh: "B-123/N.1.10/Dsp.1/01/2025 tgl. 12 Januari 2025"
+      const m = rawNoTgl.match(/(?:tgl\.?|tanggal)\s*(.+)$/i);
+      isoDate = normalizeDateToIso(m ? m[1].trim() : rawNoTgl);
+    }
+
+    // Waktu: pakai dari CSV kalau ada, kalau tidak acak 09:00-15:00
+    const jam = rawWaktu.trim() || getRandomTimeBetween(9, 15);
 
     let noTglSurat = rawNoTgl.trim();
     if (!noTglSurat) {
@@ -912,27 +935,26 @@ export function transformCsvToRIn4(rows: string[][]): Array<{
       noTglSurat = normNomor ? `${normNomor} tgl. ${displayTgl}` : displayTgl;
     }
 
-    const waktuTerima = rawWaktu.trim() || (isoDate ? `${isoDate} ${randomJam}` : randomJam);
+    const waktuTerima = isoDate ? `${isoDate} ${jam}` : jam;
 
     result.push({
       nomorUrut,
       tgl: isoDate,
-      waktu: randomJam,
+      waktu: jam,
       data: {
         no_tgl_surat: noTglSurat,
         kepada: rawKepada.trim() || "Kejaksaan Tinggi Bali",
         perihal: rawHal.trim() || "-",
         lampiran: rawLampiran.trim() || "-",
         waktu_terima: waktuTerima,
-        nama_paraf: rawNamaParaf.trim() || "Staf Tata Usaha",
-        keterangan: rawKet.trim() || "Diterima lengkap",
+        nama_paraf: rawNamaParaf.trim() || "PTSP Kejati Bali",
+        keterangan: rawKet.trim() || "Kajati Bali; Wakajati Bali; Asintel Kejati Bali; Aswas Kejati Bali;",
       },
     });
   }
 
   return result;
 }
-
 /**
  * Transform CSV to R.IN.5 (Register Produk Intelijen).
  */
