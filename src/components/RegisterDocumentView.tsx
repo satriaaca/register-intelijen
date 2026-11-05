@@ -47,6 +47,7 @@ import {
   detectRin3Category,
   filterRin3EntriesByCategory,
   countRin3EntriesByCategory,
+  RIN3_CATEGORY_CODE_MAP,
 } from "../lib/rin3-category.js";
 
 import { ESIGN_DATA_URL } from "../assets/esignBase64.js";
@@ -990,6 +991,7 @@ export const RegisterDocumentView: React.FC<RegisterDocumentViewProps> = ({
             {RIN3_CATEGORIES.map((cat, idx) => {
               const isSelected = rin3CategoryFilter === cat;
               const count = rin3CategoryCounts[cat] || 0;
+              const code = RIN3_CATEGORY_CODE_MAP[cat];
               return (
                 <button
                   key={cat}
@@ -1002,6 +1004,15 @@ export const RegisterDocumentView: React.FC<RegisterDocumentViewProps> = ({
                       : "bg-white border border-emerald-300 text-emerald-900 hover:bg-emerald-100/70"
                   }`}
                 >
+                  <span
+                    className={`rounded px-1.5 py-0.2 font-mono text-[10px] font-bold ${
+                      isSelected
+                        ? "bg-white/20 text-white border border-white/40"
+                        : "bg-emerald-100 text-emerald-800 border border-emerald-300"
+                    }`}
+                  >
+                    {code}
+                  </span>
                   <span>{cat}</span>
                   {count > 0 ? (
                     <span
@@ -1072,9 +1083,9 @@ export const RegisterDocumentView: React.FC<RegisterDocumentViewProps> = ({
 
             {register.code === "R.IN.3" && rin3CategoryFilter !== "all" && (
               <div className="mt-1">
-                <span className="inline-flex items-center gap-1 text-[11px] font-extrabold uppercase tracking-wider text-emerald-950 bg-emerald-100/90 px-3 py-0.5 rounded border border-emerald-400">
+                <span className="inline-flex items-center gap-1.5 text-[11px] font-extrabold uppercase tracking-wider text-emerald-950 bg-emerald-100/90 px-3 py-0.5 rounded border border-emerald-400">
                   <ShieldCheck className="w-3.5 h-3.5 text-emerald-700" />
-                  BIDANG: {rin3CategoryFilter}
+                  BIDANG: {rin3CategoryFilter} ({RIN3_CATEGORY_CODE_MAP[rin3CategoryFilter]})
                 </span>
               </div>
             )}

@@ -1,11 +1,81 @@
 import { RegisterEntryRow, RIN3_CATEGORIES, Rin3CategoryType } from "../types.js";
 
 /**
+ * Pemetaan Kode Surat Resmi Intelijen Kejaksaan RI ke Kategori R.IN.3:
+ * - Dip = IDEOLOGI, POLITIK, PERTAHANAN DAN KEAMANAN
+ * - Dsb = SOSIAL BUDAYA DAN KEMASYARAKATAN
+ * - Dek = EKONOMI DAN KEUANGAN
+ * - Dpp = PENGAMANAN PEMBANGUNAN STRATEGIS
+ * - Dti = TEKNOLOGI INFORMASI DAN PRODUKSI INTELIJEN
+ */
+export const RIN3_CODE_MAP: Record<string, Rin3CategoryType> = {
+  Dip: "IDEOLOGI, POLITIK, PERTAHANAN DAN KEAMANAN",
+  Dsb: "SOSIAL BUDAYA DAN KEMASYARAKATAN",
+  Dek: "EKONOMI DAN KEUANGAN",
+  Dpp: "PENGAMANAN PEMBANGUNAN STRATEGIS",
+  Dti: "TEKNOLOGI INFORMASI DAN PRODUKSI INTELIJEN",
+};
+
+export const RIN3_CATEGORY_CODE_MAP: Record<Rin3CategoryType, "Dip" | "Dsb" | "Dek" | "Dpp" | "Dti"> = {
+  "IDEOLOGI, POLITIK, PERTAHANAN DAN KEAMANAN": "Dip",
+  "SOSIAL BUDAYA DAN KEMASYARAKATAN": "Dsb",
+  "EKONOMI DAN KEUANGAN": "Dek",
+  "PENGAMANAN PEMBANGUNAN STRATEGIS": "Dpp",
+  "TEKNOLOGI INFORMASI DAN PRODUKSI INTELIJEN": "Dti",
+};
+
+/**
+ * Deteksi kategori R.IN.3 berdasarkan kode surat Kejaksaan:
+ * - Dip (Ideologi, Politik, Pertahanan dan Keamanan)
+ * - Dsb (Sosial Budaya dan Kemasyarakatan)
+ * - Dek (Ekonomi dan Keuangan)
+ * - Dpp (Pengamanan Pembangunan Strategis)
+ * - Dti (Teknologi Informasi dan Produksi Intelijen)
+ *
+ * Mampu membaca format nomor surat seperti:
+ * - R-1113/N.1.17.2/Dsb.4/07/2026
+ * - R-1112/N.1.17.2/Dek.3/07/2026
+ * - R-1102/N.1.17.2/Dip.2/07/2026
+ * - PRINT-05/N.1.17/Dpp.1/04/2026
+ * - SP.OPS-01/N.1.17/Dti.2/08/2026
+ * - Serta kode mandiri "Dip", "Dsb", "Dek", "Dpp", "Dti"
+ */
+export function detectCategoryFromLetterCode(text?: string | null): Rin3CategoryType | null {
+  if (!text || typeof text !== "string") return null;
+
+  // Catatan: Gunakan batas karakter non-alfanumerik agar tidak mencocokkan kata pasif seperti "diproses", "diperiksa", "dipimpin".
+  if (/(?:^|[^a-zA-Z0-9])dsb(?:[.-][0-9]+)?(?:$|[^a-zA-Z0-9])/i.test(text)) {
+    return "SOSIAL BUDAYA DAN KEMASYARAKATAN";
+  }
+  if (/(?:^|[^a-zA-Z0-9])dek(?:[.-][0-9]+)?(?:$|[^a-zA-Z0-9])/i.test(text)) {
+    return "EKONOMI DAN KEUANGAN";
+  }
+  if (/(?:^|[^a-zA-Z0-9])dpp(?:[.-][0-9]+)?(?:$|[^a-zA-Z0-9])/i.test(text)) {
+    return "PENGAMANAN PEMBANGUNAN STRATEGIS";
+  }
+  if (/(?:^|[^a-zA-Z0-9])dti(?:[.-][0-9]+)?(?:$|[^a-zA-Z0-9])/i.test(text)) {
+    return "TEKNOLOGI INFORMASI DAN PRODUKSI INTELIJEN";
+  }
+  if (/(?:^|[^a-zA-Z0-9])dip(?:[.-][0-9]+)?(?:$|[^a-zA-Z0-9])/i.test(text)) {
+    return "IDEOLOGI, POLITIK, PERTAHANAN DAN KEAMANAN";
+  }
+
+  return null;
+}
+
+/**
  * Normalisasi string menjadi salah satu dari 5 kategori resmi R.IN.3.
  */
 export function normalizeRin3Category(raw?: string | null): Rin3CategoryType | null {
   if (!raw || typeof raw !== "string") return null;
-  const lower = raw.toLowerCase().trim();
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+
+  // Cek kode surat terlebih dahulu (misal: "Dip", "Dsb", "Dek", "Dpp", "Dti" atau nomor surat)
+  const fromCode = detectCategoryFromLetterCode(trimmed);
+  if (fromCode) return fromCode;
+
+  const lower = trimmed.toLowerCase();
 
   if (
     lower.includes("ideologi") ||
@@ -71,9 +141,10 @@ export function normalizeRin3Category(raw?: string | null): Rin3CategoryType | n
 
 /**
  * Deteksi kategori R.IN.3 secara cerdas:
- * 1. Prioritaskan field data?.kategori / data?.bidang / data?.sektor jika sudah diisi.
- * 2. Analisis uraian peristiwa, bapul, atau tindak lanjut berdasarkan kata kunci intelijen.
- * 3. Fallback default: "IDEOLOGI, POLITIK, PERTAHANAN DAN KEAMANAN".
+ * 1. PRIORITAS UTAMA: Kode surat resmi Kejaksaan (Dip, Dsb, Dek, Dpp, Dti) dari nomor surat / tindak lanjut.
+ * 2. Cek field eksplisit data?.kategori / data?.bidang / data?.sektor jika sudah diatur.
+ * 3. Analisis uraian peristiwa atau sumber bapul berdasarkan kata kunci intelijen.
+ * 4. Fallback default: "IDEOLOGI, POLITIK, PERTAHANAN DAN KEAMANAN".
  */
 export function detectRin3Category(entryOrData: RegisterEntryRow | Record<string, any>): Rin3CategoryType {
   const data: Record<string, any> =
@@ -81,7 +152,23 @@ export function detectRin3Category(entryOrData: RegisterEntryRow | Record<string
       ? (entryOrData as RegisterEntryRow).data || {}
       : (entryOrData as Record<string, any>) || {};
 
-  // 1. Cek field eksplisit
+  // 1. PRIORITAS TERTINGGI: Deteksi dari Kode Surat (Dip, Dsb, Dek, Dpp, Dti)
+  // Periksa field yang memuat nomor surat atau tindak lanjut
+  const highPriorityCodeFields = [
+    String(data.nomor_surat || ""),
+    String(data.nomorSurat || ""),
+    String(data.tindak_lanjut || ""),
+    String(data.catatan || ""),
+  ];
+
+  for (const field of highPriorityCodeFields) {
+    if (field) {
+      const detected = detectCategoryFromLetterCode(field);
+      if (detected) return detected;
+    }
+  }
+
+  // 2. Cek field eksplisit kategori / bidang / sektor jika sudah diatur
   const explicit =
     normalizeRin3Category(typeof data.kategori === "string" ? data.kategori : undefined) ||
     normalizeRin3Category(typeof data.bidang === "string" ? data.bidang : undefined) ||
@@ -89,13 +176,24 @@ export function detectRin3Category(entryOrData: RegisterEntryRow | Record<string
 
   if (explicit) return explicit;
 
-  // 2. Analisis teks uraian dan tindak lanjut
-  const corpus = [
+  // 3. Cek kode surat di field lainnya (uraian_peristiwa, sumber_bapul, dll.)
+  const secondaryCodeFields = [
     String(data.uraian_peristiwa || ""),
-    String(data.tindak_lanjut || ""),
     String(data.sumber_bapul || ""),
-    String(data.catatan || ""),
     String(data.keterangan || ""),
+  ];
+
+  for (const field of secondaryCodeFields) {
+    if (field) {
+      const detected = detectCategoryFromLetterCode(field);
+      if (detected) return detected;
+    }
+  }
+
+  // 4. Analisis kata kunci teks jika kode surat tidak ada
+  const corpus = [
+    ...highPriorityCodeFields,
+    ...secondaryCodeFields,
   ]
     .join(" ")
     .toLowerCase();
@@ -182,7 +280,7 @@ export function detectRin3Category(entryOrData: RegisterEntryRow | Record<string
     return "TEKNOLOGI INFORMASI DAN PRODUKSI INTELIJEN";
   }
 
-  // Ideologi, Politik, Hankam (Default untuk patroli kepolisian, polsek, pemilu, pilkada, keamanan wilayah)
+  // Fallback default
   return "IDEOLOGI, POLITIK, PERTAHANAN DAN KEAMANAN";
 }
 

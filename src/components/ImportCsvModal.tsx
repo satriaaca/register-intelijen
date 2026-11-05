@@ -9,6 +9,7 @@ import {
   transformCsvToRegister,
   getRegisterLeafColumns,
 } from "../lib/csv-importer.js";
+import { RIN3_CATEGORY_CODE_MAP } from "../lib/rin3-category.js";
 import {
   Upload,
   FileText,
@@ -377,10 +378,11 @@ export const ImportCsvModal: React.FC<ImportCsvModalProps> = ({
                   <div>• <strong>Waktu Diterima:</strong> Tanggal surat (ISO)</div>
                   <div>• <strong>Sumber / Bapul:</strong> Organik Intelijen Kejari Tabanan</div>
                   <div>• <strong>Nilai Informasi:</strong> A1</div>
-                  <div>• <strong>Catatan & Ket:</strong> -</div>
+                  <div>• <strong>Kode Bidang:</strong> Dip (Ideologi), Dsb (Sosbud), Dek (Ekonomi), Dpp (PPS), Dti (TI)</div>
                   <div>• <strong>Uraian Masalah:</strong> Hal (teks setelah tanda <code className="bg-white/80 px-1 rounded">-</code>)</div>
                   <div>• <strong>Disposisi:</strong> Dilaporkan Kepada Pimpinan</div>
                   <div>• <strong>Tindak Lanjut:</strong> Hal (sebelum <code className="bg-white/80 px-1 rounded">-</code>) Nomor: Nomor</div>
+                  <div>• <strong>Catatan & Ket:</strong> -</div>
                 </div>
               </div>
             </div>
@@ -968,6 +970,7 @@ export const ImportCsvModal: React.FC<ImportCsvModalProps> = ({
                         <tr>
                           <th className="p-2 border-r border-slate-200 text-center w-12">No</th>
                           <th className="p-2 border-r border-slate-200 w-24">Waktu Diterima</th>
+                          <th className="p-2 border-r border-slate-200 w-20 text-center">Bidang</th>
                           <th className="p-2 border-r border-slate-200 w-36">Sumber / Bapul</th>
                           <th className="p-2 border-r border-slate-200 text-center w-16">Nilai</th>
                           <th className="p-2 border-r border-slate-200 min-w-[200px]">Uraian Peristiwa/Masalah</th>
@@ -990,6 +993,14 @@ export const ImportCsvModal: React.FC<ImportCsvModalProps> = ({
                                 onChange={(e) => handleUpdateRowField(idx, "waktu_diterima", e.target.value)}
                                 className="w-full bg-transparent border-0 p-0 focus:ring-1 focus:ring-emerald-500 rounded"
                               />
+                            </td>
+                            <td className="p-2 border-r border-slate-200 text-center whitespace-nowrap">
+                              <span
+                                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-100 text-emerald-900 border border-emerald-300"
+                                title={row.data.kategori || row.data.bidang || "IDEOLOGI, POLITIK, PERTAHANAN DAN KEAMANAN"}
+                              >
+                                {RIN3_CATEGORY_CODE_MAP[(row.data.kategori || row.data.bidang || "IDEOLOGI, POLITIK, PERTAHANAN DAN KEAMANAN") as keyof typeof RIN3_CATEGORY_CODE_MAP] || "Dip"}
+                              </span>
                             </td>
                             <td className="p-2 border-r border-slate-200 text-slate-800">
                               <input

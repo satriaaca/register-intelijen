@@ -1,6 +1,11 @@
 import React, { useState, useEffect } from "react";
 import { RegisterDefinition, RegisterEntryRow, Officer, ColumnDefinition, RIN3_CATEGORIES } from "../types.js";
 import { X, Check, Calendar, Clock, Users, Plus, Trash2, Layers } from "lucide-react";
+import {
+  RIN3_CATEGORY_CODE_MAP,
+  detectCategoryFromLetterCode,
+  detectRin3Category,
+} from "../lib/rin3-category.js";
 
 interface EntryFormModalProps {
   isOpen: boolean;
@@ -44,7 +49,13 @@ export const EntryFormModal: React.FC<EntryFormModalProps> = ({
   useEffect(() => {
     if (initialEntry) {
       setNomorUrut(initialEntry.nomorUrut);
-      setFormData(initialEntry.data || {});
+      const initData = { ...(initialEntry.data || {}) };
+      if (register.code === "R.IN.3" && !initData.kategori) {
+        const cat = detectRin3Category(initialEntry);
+        initData.kategori = cat;
+        initData.bidang = cat;
+      }
+      setFormData(initData);
     } else {
       setNomorUrut(nextNomorUrut);
       // Initialize default date/time fields according to selected year & month
@@ -76,6 +87,10 @@ export const EntryFormModal: React.FC<EntryFormModalProps> = ({
           if (c.type === "officer_multi") initial[c.key] = [];
         }
       });
+      if (register.code === "R.IN.3") {
+        initial.kategori = "IDEOLOGI, POLITIK, PERTAHANAN DAN KEAMANAN";
+        initial.bidang = "IDEOLOGI, POLITIK, PERTAHANAN DAN KEAMANAN";
+      }
       setFormData(initial);
     }
   }, [initialEntry, nextNomorUrut, register, isOpen, selectedYear, selectedMonth]);
@@ -84,7 +99,23 @@ export const EntryFormModal: React.FC<EntryFormModalProps> = ({
 
   const handleChange = (key: string, value: any) => {
     if (isLocked) return;
-    setFormData((prev) => ({ ...prev, [key]: value }));
+    setFormData((prev) => {
+      const updated = { ...prev, [key]: value };
+      // Khusus R.IN.3: jika mengetik nomor surat, tindak lanjut, atau uraian, dan terdeteksi kode surat (Dip, Dsb, Dek, Dpp, Dti),
+      // otomatis sesuaikan kategori & bidang
+      if (
+        register.code === "R.IN.3" &&
+        (key === "tindak_lanjut" || key === "nomor_surat" || key === "uraian_peristiwa") &&
+        typeof value === "string"
+      ) {
+        const detected = detectCategoryFromLetterCode(value);
+        if (detected) {
+          updated.kategori = detected;
+          updated.bidang = detected;
+        }
+      }
+      return updated;
+    });
   };
 
   const handleOfficerToggle = (fieldKey: string, officerId: number) => {
@@ -518,9 +549,14 @@ export const EntryFormModal: React.FC<EntryFormModalProps> = ({
           {/* Khusus R.IN.3: Pilihan Bidang / Kategori Intelijen */}
           {register.code === "R.IN.3" && (
             <div className="p-3 bg-emerald-50/70 rounded border border-emerald-300 space-y-1.5">
-              <label className="text-[11px] font-bold text-emerald-950 uppercase tracking-tight flex items-center gap-1.5">
-                <Layers className="w-3.5 h-3.5 text-emerald-700" />
-                <span>Bidang / Kategori Intelijen (R.IN.3)</span>
+              <label className="text-[11px] font-bold text-emerald-950 uppercase tracking-tight flex items-center justify-between">
+                <span className="flex items-center gap-1.5">
+                  <Layers className="w-3.5 h-3.5 text-emerald-700" />
+                  <span>Bidang / Kategori Intelijen (R.IN.3)</span>
+                </span>
+                <span className="text-[10px] font-mono font-bold text-emerald-800 bg-emerald-100 border border-emerald-300 px-1.5 py-0.5 rounded">
+                  Kode: {RIN3_CATEGORY_CODE_MAP[(formData.kategori || formData.bidang || "IDEOLOGI, POLITIK, PERTAHANAN DAN KEAMANAN") as keyof typeof RIN3_CATEGORY_CODE_MAP] || "Dip"}
+                </span>
               </label>
               <select
                 id="select-rin3-category"
@@ -538,12 +574,12 @@ export const EntryFormModal: React.FC<EntryFormModalProps> = ({
               >
                 {RIN3_CATEGORIES.map((cat) => (
                   <option key={cat} value={cat}>
-                    {cat}
+                    [{RIN3_CATEGORY_CODE_MAP[cat]}] {cat}
                   </option>
                 ))}
               </select>
               <p className="text-[10px] text-emerald-800 italic">
-                *) Sesuai ketentuan R.IN.3, entri diklasifikasikan ke salah satu dari 5 bidang intelijen.
+                *) Sesuai tata naskah dinas Kejaksaan RI: Dip = Ideologi/Hankam, Dsb = Sosbud, Dek = Ekonomi, Dpp = PPS, Dti = TI & Sandi. Otomatis menyesuaikan kode nomor surat.
               </p>
             </div>
           )}

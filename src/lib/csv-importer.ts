@@ -1,4 +1,5 @@
 import { StorageCodeMapping, RegisterDefinition } from "../types.js";
+import { detectCategoryFromLetterCode } from "./rin3-category.js";
 
 export interface ParsedCsvRow {
   [key: string]: string;
@@ -556,6 +557,12 @@ export function transformCsvToRIn3(
       ? `${judulSurat} Nomor: ${nomorSurat}`
       : judulSurat;
 
+    const detectedCategory =
+      detectCategoryFromLetterCode(nomorSurat) ||
+      detectCategoryFromLetterCode(tindakLanjut) ||
+      detectCategoryFromLetterCode(hal) ||
+      "IDEOLOGI, POLITIK, PERTAHANAN DAN KEAMANAN";
+
     result.push({
       nomorUrut,
       tgl: isoDate,
@@ -568,6 +575,9 @@ export function transformCsvToRIn3(
         catatan: "-",
         disposisi_tindakan: "Dilaporkan Kepada Pimpinan",
         tindak_lanjut: tindakLanjut,
+        nomor_surat: nomorSurat,
+        kategori: detectedCategory,
+        bidang: detectedCategory,
         keterangan: resolveKeteranganValue(rawStatus, "-", options?.defaultKeterangan),
       },
     });
