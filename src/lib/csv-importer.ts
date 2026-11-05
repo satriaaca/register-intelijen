@@ -4,6 +4,14 @@ export interface ParsedCsvRow {
   [key: string]: string;
 }
 
+export interface TransformCsvOptions {
+  /**
+   * Nilai default untuk kolom disposisi pimpinan jika kosong atau tidak ada di file CSV.
+   * Contoh: "Arsip"
+   */
+  defaultDisposisiPimpinan?: string;
+}
+
 /**
  * Baris R.IN.3 dengan kolom Hal yang dimulai dari prefix ini tidak diimpor.
  */
@@ -883,7 +891,10 @@ export function transformCsvToRIn4(rows: string[][]): Array<{
 /**
  * Transform CSV to R.IN.5 (Register Produk Intelijen).
  */
-export function transformCsvToRIn5(rows: string[][]): Array<{
+export function transformCsvToRIn5(
+  rows: string[][],
+  options?: TransformCsvOptions,
+): Array<{
   nomorUrut: number;
   tgl: string;
   waktu?: string;
@@ -994,11 +1005,24 @@ export function transformCsvToRIn5(rows: string[][]): Array<{
       }
     }
 
-    const disposisiPimpinan =
-      rawDisposisi.trim() ||
-      (rawKet.trim() === "Diproses"
-        ? "Diproses - Monitor perkembangan"
-        : "Ditindaklanjuti dan monitor perkembangan");
+    const trimmedDisposisi = rawDisposisi.trim();
+    const defaultDisp =
+      options?.defaultDisposisiPimpinan !== undefined &&
+      options.defaultDisposisiPimpinan.trim() !== ""
+        ? options.defaultDisposisiPimpinan.trim()
+        : null;
+
+    let disposisiPimpinan = trimmedDisposisi;
+    if (!disposisiPimpinan || disposisiPimpinan === "-") {
+      if (defaultDisp) {
+        disposisiPimpinan = defaultDisp;
+      } else {
+        disposisiPimpinan =
+          rawKet.trim() === "Diproses"
+            ? "Diproses - Monitor perkembangan"
+            : "Ditindaklanjuti dan monitor perkembangan";
+      }
+    }
 
     result.push({
       nomorUrut,
@@ -1419,6 +1443,7 @@ export function transformCsvToRIn20(rows: string[][]): Array<{
 export function transformCsvGeneric(
   rows: string[][],
   register: RegisterDefinition,
+  options?: TransformCsvOptions,
 ): Array<{
   nomorUrut: number;
   tgl: string;
@@ -1507,7 +1532,7 @@ export function transformCsvGeneric(
 
     leafCols.forEach((leaf) => {
       const idx = colIndexMap[leaf.key];
-      let val = idx !== undefined && idx >= 0 ? getCell(row, idx) : "";
+      let val = idx !== undefined && idx >= 0 ? getCell(row, idx).trim() : "";
 
       // If combined field like no_tgl_... and empty, try combining nomor + tanggal
       if (
@@ -1529,6 +1554,21 @@ export function transformCsvGeneric(
       if (!detectedTgl && (leaf.type === "date" || leaf.type === "datetime") && val) {
         const iso = normalizeDateToIso(val);
         if (iso) detectedTgl = iso;
+      }
+
+      // Check if default disposisi pimpinan should apply when empty or '-'
+      const isDisposisiKey =
+        leaf.key === "disposisi_pimpinan" ||
+        leaf.key === "disposisiPimpinan" ||
+        leaf.key === "disposisi_tindakan" ||
+        leaf.key === "disposisi";
+      if (
+        (!val || val === "-") &&
+        isDisposisiKey &&
+        options?.defaultDisposisiPimpinan &&
+        options.defaultDisposisiPimpinan.trim() !== ""
+      ) {
+        val = options.defaultDisposisiPimpinan.trim();
       }
 
       rowData[leaf.key] = val || "-";
@@ -1563,6 +1603,7 @@ export function transformCsvToRegister(
   rows: string[][],
   register: RegisterDefinition,
   storageCodeMappings: StorageCodeMapping[] = [],
+  options?: TransformCsvOptions,
 ): Array<{
   nomorUrut: number;
   tgl: string;
@@ -1582,7 +1623,7 @@ export function transformCsvToRegister(
     return transformCsvToRIn4(rows);
   }
   if (register.code === "R.IN.5") {
-    return transformCsvToRIn5(rows);
+    return transformCsvToRIn5(rows, options);
   }
   if (register.code === "R.IN.6") {
     return transformCsvToRIn6(rows, storageCodeMappings);
@@ -1599,5 +1640,5 @@ export function transformCsvToRegister(
   if (register.code === "R.IN.20") {
     return transformCsvToRIn20(rows);
   }
-  return transformCsvGeneric(rows, register);
+  return transformCsvGeneric(rows, register, options);
 }

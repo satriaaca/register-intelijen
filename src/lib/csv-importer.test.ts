@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseCsv } from "./csv-importer.js";
+import { parseCsv, transformCsvToRIn5 } from "./csv-importer.js";
 
 describe("csv-importer", () => {
   describe("parseCsv", () => {
@@ -47,6 +47,43 @@ describe("csv-importer", () => {
         ["a", "b"],
         ["1", "2"],
       ]);
+    });
+  });
+
+  describe("transformCsvToRIn5 with defaultDisposisiPimpinan", () => {
+    it("should apply defaultDisposisiPimpinan 'Arsip' when disposisi is empty in CSV", () => {
+      const rows = [
+        ["No", "Tanggal", "Nomor Surat", "Asal", "Hal", "Disposisi Pimpinan", "Status"],
+        ["1", "2026-08-10", "R-10/N.1.17/Dsb.4/08/2026", "Seksi Intelijen", "Laporan Pemantauan", "", "Selesai"],
+        ["2", "2026-08-11", "R-11/N.1.17/Dsb.4/08/2026", "Seksi Intelijen", "Laporan Penyelidikan", "-", "Selesai"],
+      ];
+
+      const result = transformCsvToRIn5(rows, { defaultDisposisiPimpinan: "Arsip" });
+      expect(result).toHaveLength(2);
+      expect(result[0].data.disposisi_pimpinan).toBe("Arsip");
+      expect(result[1].data.disposisi_pimpinan).toBe("Arsip");
+    });
+
+    it("should retain CSV value when disposisi is filled in CSV", () => {
+      const rows = [
+        ["No", "Tanggal", "Nomor Surat", "Asal", "Hal", "Disposisi Pimpinan", "Status"],
+        ["1", "2026-08-10", "R-10/N.1.17/Dsb.4/08/2026", "Seksi Intelijen", "Laporan Pemantauan", "Tindak lanjuti segera ke lapangan", "Selesai"],
+      ];
+
+      const result = transformCsvToRIn5(rows, { defaultDisposisiPimpinan: "Arsip" });
+      expect(result).toHaveLength(1);
+      expect(result[0].data.disposisi_pimpinan).toBe("Tindak lanjuti segera ke lapangan");
+    });
+
+    it("should apply defaultDisposisiPimpinan 'Arsip' when CSV has no disposisi column", () => {
+      const rows = [
+        ["No", "Tanggal", "Nomor", "Asal", "Hal", "Status"],
+        ["1", "2026-08-10", "R-10/N.1.17/Dsb.4/08/2026", "Seksi Intelijen", "Laporan Pemantauan", "Selesai"],
+      ];
+
+      const result = transformCsvToRIn5(rows, { defaultDisposisiPimpinan: "Arsip" });
+      expect(result).toHaveLength(1);
+      expect(result[0].data.disposisi_pimpinan).toBe("Arsip");
     });
   });
 });
