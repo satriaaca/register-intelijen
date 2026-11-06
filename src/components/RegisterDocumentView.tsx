@@ -25,6 +25,7 @@ import {
   ChevronsLeft,
   ChevronsRight,
   X,
+  RotateCcw,
 } from "lucide-react";
 import jsPDF from "jspdf";
 
@@ -202,6 +203,12 @@ export const RegisterDocumentView: React.FC<RegisterDocumentViewProps> = ({
   const [tempClosingDate, setTempClosingDate] = useState("");
   const [isSavingClosingDate, setIsSavingClosingDate] = useState(false);
 
+  // State Rekapitulasi Manual (R.IN.5, R.IN.19, dsb.)
+  const [manualRekapData, setManualRekapData] = useState<Record<string, number | string> | null>(null);
+  const [isEditingRekap, setIsEditingRekap] = useState(false);
+  const [tempRekapData, setTempRekapData] = useState<Record<string, string>>({});
+  const [isSavingRekap, setIsSavingRekap] = useState(false);
+
   /*
    * Map:
    * kode penyimpanan -> asal instansi.
@@ -241,6 +248,34 @@ export const RegisterDocumentView: React.FC<RegisterDocumentViewProps> = ({
   useEffect(() => {
     void loadRegisterLock();
   }, [loadRegisterLock]);
+
+  const loadRegisterRekapitulasi = useCallback(async () => {
+    if (!register.hasRekapitulasi) {
+      setManualRekapData(null);
+      setIsEditingRekap(false);
+      return;
+    }
+    try {
+      const res = await authFetch(
+        `/api/register-rekapitulasi?registerCode=${encodeURIComponent(register.code)}&periodKey=${encodeURIComponent(currentPeriodKey)}`,
+      );
+      if (res.ok) {
+        const record = await res.json();
+        setManualRekapData(record?.data || null);
+      } else {
+        setManualRekapData(null);
+      }
+    } catch (e) {
+      console.error("Failed to load register rekapitulasi:", e);
+      setManualRekapData(null);
+    } finally {
+      setIsEditingRekap(false);
+    }
+  }, [register.code, register.hasRekapitulasi, currentPeriodKey]);
+
+  useEffect(() => {
+    void loadRegisterRekapitulasi();
+  }, [loadRegisterRekapitulasi]);
 
   useEffect(() => {
     setCurrentOrientation(register.orientation || "landscape");
@@ -612,6 +647,107 @@ export const RegisterDocumentView: React.FC<RegisterDocumentViewProps> = ({
     }
   };
 
+  // Hitungan Rekapitulasi Otomatis dari baris data terfilter pada periode ini
+  const autoRekapCounts = React.useMemo(() => {
+    if (!register.hasRekapitulasi || !register.rekapitulasiFields) return {};
+    const counts: Record<string, number> = {};
+    register.rekapitulasiFields.forEach((field) => {
+      counts[field.key] = filteredEntries.filter((entry) => {
+        const value = entry.data?.[field.key] || entry.data?.jenis_produk;
+        return value !== undefined && value !== "" && value !== null;
+      }).length;
+    });
+    return counts;
+  }, [register.hasRekapitulasi, register.rekapitulasiFields, filteredEntries]);
+
+  // Nilai Rekapitulasi Efektif (Manual jika diset, atau Otomatis)
+  const effectiveRekapData = React.useMemo(() => {
+    if (!register.hasRekapitulasi || !register.rekapitulasiFields) return {};
+    const merged: Record<string, number | string> = { ...autoRekapCounts };
+    if (manualRekapData) {
+      Object.entries(manualRekapData).forEach(([k, v]) => {
+        if (v !== undefined && v !== "") {
+          merged[k] = v as string | number;
+        }
+      });
+    }
+    return merged;
+  }, [register.hasRekapitulasi, register.rekapitulasiFields, autoRekapCounts, manualRekapData]);
+
+  const handleStartEditRekap = () => {
+    const initial: Record<string, string> = {};
+    if (register.rekapitulasiFields) {
+      register.rekapitulasiFields.forEach((field) => {
+        const val = manualRekapData?.[field.key] ?? autoRekapCounts[field.key] ?? 0;
+        initial[field.key] = String(val);
+      });
+    }
+    setTempRekapData(initial);
+    setIsEditingRekap(true);
+  };
+
+  const handleSaveRekap = async () => {
+    try {
+      setIsSavingRekap(true);
+      const dataToSave: Record<string, number | string> = {};
+      if (register.rekapitulasiFields) {
+        register.rekapitulasiFields.forEach((field) => {
+          const raw = tempRekapData[field.key]?.trim();
+          if (raw !== undefined && raw !== "") {
+            const num = Number(raw);
+            dataToSave[field.key] = isNaN(num) ? raw : num;
+          } else {
+            dataToSave[field.key] = autoRekapCounts[field.key] ?? 0;
+          }
+        });
+      }
+
+      const res = await authFetch("/api/register-rekapitulasi", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          registerCode: register.code,
+          periodKey: currentPeriodKey,
+          data: dataToSave,
+        }),
+      });
+
+      if (!res.ok) {
+        throw new Error("Gagal menyimpan rekapitulasi.");
+      }
+
+      const saved = await res.json();
+      setManualRekapData(saved.data);
+      setIsEditingRekap(false);
+    } catch (err) {
+      console.error("Gagal menyimpan rekapitulasi manual:", err);
+      alert("Gagal menyimpan rekapitulasi. Pastikan koneksi server tersedia.");
+    } finally {
+      setIsSavingRekap(false);
+    }
+  };
+
+  const handleResetRekapToAuto = async () => {
+    if (!window.confirm("Kembalikan rekapitulasi ke hitungan otomatis dari entri data tabel?")) {
+      return;
+    }
+    try {
+      setIsSavingRekap(true);
+      const res = await authFetch(
+        `/api/register-rekapitulasi?registerCode=${encodeURIComponent(register.code)}&periodKey=${encodeURIComponent(currentPeriodKey)}`,
+        { method: "DELETE" }
+      );
+      if (res.ok) {
+        setManualRekapData(null);
+        setIsEditingRekap(false);
+      }
+    } catch (err) {
+      console.error("Gagal mereset rekapitulasi:", err);
+    } finally {
+      setIsSavingRekap(false);
+    }
+  };
+
   const handleGeneratePdf = () => {
     return generateRegisterPdf({
       register,
@@ -623,6 +759,7 @@ export const RegisterDocumentView: React.FC<RegisterDocumentViewProps> = ({
       customClosingDate: activeClosingDate,
       orientationOverride: currentOrientation,
       lockSnapshot: currentLock,
+      rekapitulasiData: effectiveRekapData,
       categoryFilter:
         register.code === "R.IN.3" && rin3CategoryFilter !== "all"
           ? rin3CategoryFilter
@@ -1717,40 +1854,167 @@ export const RegisterDocumentView: React.FC<RegisterDocumentViewProps> = ({
         </div>
 
         {register.hasRekapitulasi && register.rekapitulasiFields && (
-          <div className="mt-4 max-w-sm rounded border border-slate-300 bg-slate-50 p-3 text-xs">
-            <h4 className="mb-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-900">
-              Rekapitulasi Dokumen Register ({currentPeriodLabel}):
-            </h4>
+          <div className="mt-4 max-w-lg rounded-lg border border-slate-300 bg-slate-50/90 p-3.5 text-xs shadow-xs">
+            <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 pb-2">
+              <div className="flex items-center gap-2">
+                <h4 className="text-[11px] font-bold uppercase tracking-wider text-slate-900">
+                  Rekapitulasi Dokumen Register ({currentPeriodLabel})
+                </h4>
+                {manualRekapData ? (
+                  <span className="inline-flex items-center gap-1 rounded bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800 border border-amber-300">
+                    Input Manual
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 rounded bg-slate-200/80 px-2 py-0.5 text-[10px] font-medium text-slate-600">
+                    Hitungan Otomatis
+                  </span>
+                )}
+              </div>
 
-            <div className="space-y-1 text-slate-700">
-              {register.rekapitulasiFields.map((field, index) => {
-                const count = filteredEntries.filter((entry) => {
-                  const value =
-                    entry.data?.[field.key] || entry.data?.jenis_produk;
+              {!isEditingRekap ? (
+                <div className="flex items-center gap-1.5">
+                  {!currentLock?.isLocked ? (
+                    <>
+                      <button
+                        type="button"
+                        onClick={handleStartEditRekap}
+                        className="inline-flex items-center gap-1 rounded border border-slate-300 bg-white px-2 py-1 text-[11px] font-medium text-slate-700 shadow-xs hover:bg-slate-100 hover:text-slate-900 transition-colors cursor-pointer"
+                        title="Ubah nilai rekapitulasi secara manual"
+                      >
+                        <Edit3 className="h-3 w-3 text-slate-500" />
+                        Edit Rekapitulasi
+                      </button>
+                      {manualRekapData && (
+                        <button
+                          type="button"
+                          onClick={handleResetRekapToAuto}
+                          disabled={isSavingRekap}
+                          className="inline-flex items-center gap-1 rounded border border-amber-300 bg-amber-50 px-2 py-1 text-[11px] font-medium text-amber-800 shadow-xs hover:bg-amber-100 transition-colors cursor-pointer"
+                          title="Kembalikan ke hitungan otomatis sistem"
+                        >
+                          <RotateCcw className="h-3 w-3 text-amber-700" />
+                          Hitung Otomatis
+                        </button>
+                      )}
+                    </>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 text-[10px] text-slate-500">
+                      <Lock className="h-3 w-3 text-amber-600" />
+                      Terkunci
+                    </span>
+                  )}
+                </div>
+              ) : (
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={handleSaveRekap}
+                    disabled={isSavingRekap}
+                    className="inline-flex items-center gap-1 rounded bg-emerald-600 px-2.5 py-1 text-[11px] font-medium text-white shadow-xs hover:bg-emerald-700 disabled:opacity-50 transition-colors cursor-pointer"
+                  >
+                    <Save className="h-3 w-3" />
+                    {isSavingRekap ? "Menyimpan..." : "Simpan"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsEditingRekap(false)}
+                    disabled={isSavingRekap}
+                    className="inline-flex items-center gap-1 rounded border border-slate-300 bg-white px-2 py-1 text-[11px] font-medium text-slate-700 shadow-xs hover:bg-slate-100 transition-colors cursor-pointer"
+                  >
+                    <X className="h-3 w-3 text-slate-500" />
+                    Batal
+                  </button>
+                </div>
+              )}
+            </div>
 
-                  return (
-                    value !== undefined &&
-                    value !== "" &&
-                    value !== null
-                  );
-                }).length;
-
-                return (
+            {isEditingRekap ? (
+              <div className="space-y-2 pt-1 text-slate-700">
+                <div className="mb-2 flex items-center justify-between text-[11px] text-slate-500 italic">
+                  <span>Isi jumlah dokumen sesuai catatan fisik/rekapitulasi Anda:</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const autoFill: Record<string, string> = {};
+                      register.rekapitulasiFields?.forEach((f) => {
+                        autoFill[f.key] = String(autoRekapCounts[f.key] ?? 0);
+                      });
+                      setTempRekapData(autoFill);
+                    }}
+                    className="text-[10px] text-blue-600 hover:underline not-italic font-medium cursor-pointer"
+                  >
+                    Salin Hitungan Otomatis
+                  </button>
+                </div>
+                {register.rekapitulasiFields.map((field, index) => (
                   <div
                     key={field.key}
-                    className="flex items-center justify-between border-b border-slate-200/60 pb-0.5 text-[11px]"
+                    className="flex items-center justify-between gap-3 border-b border-slate-200/60 pb-1.5 text-[11px]"
                   >
-                    <span>
+                    <label className="font-medium text-slate-800 flex-1">
                       {index + 1}. {field.label}
-                    </span>
+                      <span className="ml-1 text-[10px] font-normal text-slate-400">
+                        (Otomatis: {autoRekapCounts[field.key] ?? 0})
+                      </span>
+                    </label>
 
-                    <span className="font-mono font-bold text-slate-900">
-                      : {count} {field.suffix || ""}
-                    </span>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <span className="font-mono text-slate-500">:</span>
+                      <input
+                        type="text"
+                        value={tempRekapData[field.key] ?? ""}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setTempRekapData((prev) => ({
+                            ...prev,
+                            [field.key]: val,
+                          }));
+                        }}
+                        className="w-20 rounded border border-slate-300 bg-white px-2 py-1 text-center font-mono text-xs font-semibold text-slate-900 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 focus:outline-none"
+                        placeholder={String(autoRekapCounts[field.key] ?? 0)}
+                      />
+                      {field.suffix && (
+                        <span className="w-16 text-[11px] text-slate-500">
+                          {field.suffix}
+                        </span>
+                      )}
+                    </div>
                   </div>
-                );
-              })}
-            </div>
+                ))}
+              </div>
+            ) : (
+              <div className="space-y-1.5 text-slate-700">
+                {register.rekapitulasiFields.map((field, index) => {
+                  const displayValue = effectiveRekapData[field.key] ?? 0;
+                  const isOverridden =
+                    manualRekapData &&
+                    manualRekapData[field.key] !== undefined &&
+                    manualRekapData[field.key] !== "";
+
+                  return (
+                    <div
+                      key={field.key}
+                      className="flex items-center justify-between border-b border-slate-200/60 pb-0.5 text-[11px]"
+                    >
+                      <span className="text-slate-800">
+                        {index + 1}. {field.label}
+                      </span>
+
+                      <div className="flex items-center gap-2">
+                        {isOverridden && (
+                          <span className="text-[10px] text-slate-400">
+                            (auto: {autoRekapCounts[field.key] ?? 0})
+                          </span>
+                        )}
+                        <span className="font-mono font-bold text-slate-900">
+                          : {displayValue} {field.suffix || ""}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
 

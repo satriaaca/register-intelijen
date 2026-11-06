@@ -36,6 +36,7 @@ export interface GeneratePdfOptions {
   orientationOverride?: "landscape" | "portrait";
   lockSnapshot?: RegisterLock | null;
   categoryFilter?: string | null;
+  rekapitulasiData?: Record<string, number | string>;
 }
 
 export function generateRegisterPdf(options: GeneratePdfOptions): jsPDF {
@@ -50,6 +51,7 @@ export function generateRegisterPdf(options: GeneratePdfOptions): jsPDF {
     orientationOverride,
     lockSnapshot,
     categoryFilter,
+    rekapitulasiData,
   } = options;
   const isLandscape = (orientationOverride || register.orientation) === "landscape";
 
@@ -501,13 +503,25 @@ export function generateRegisterPdf(options: GeneratePdfOptions): jsPDF {
     doc.setFont("helvetica", "normal");
     doc.setFontSize(8);
     register.rekapitulasiFields.forEach((rf, idx) => {
-      const count = entries.filter((e) => {
-        const val = e.data?.[rf.key] || e.data?.jenis_produk;
-        return val !== undefined && val !== "" && val !== null;
-      }).length;
+      let displayValue: string | number = "..........";
+      if (
+        rekapitulasiData &&
+        rekapitulasiData[rf.key] !== undefined &&
+        rekapitulasiData[rf.key] !== ""
+      ) {
+        displayValue = rekapitulasiData[rf.key];
+      } else {
+        const count = entries.filter((e) => {
+          const val = e.data?.[rf.key] || e.data?.jenis_produk;
+          return val !== undefined && val !== "" && val !== null;
+        }).length;
+        if (count > 0) {
+          displayValue = count;
+        }
+      }
 
       doc.text(`${idx + 1}. ${rf.label}`, marginX + 4, finalY);
-      doc.text(`:  ${count > 0 ? count : ".........."} ${rf.suffix || ""}`, marginX + 80, finalY);
+      doc.text(`:  ${displayValue} ${rf.suffix || ""}`, marginX + 80, finalY);
       finalY += 4;
     });
     finalY += 4;

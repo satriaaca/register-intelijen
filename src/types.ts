@@ -107,6 +107,15 @@ export interface RegisterLock {
   updatedAt?: string | Date | null;
 }
 
+export interface RegisterRekapitulasiRecord {
+  id?: number;
+  registerCode: string;
+  periodKey: string;
+  data: Record<string, number | string>;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+}
+
 export const RIN3_CATEGORIES = [
   "IDEOLOGI, POLITIK, PERTAHANAN DAN KEAMANAN",
   "SOSIAL BUDAYA DAN KEMASYARAKATAN",

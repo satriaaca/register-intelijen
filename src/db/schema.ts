@@ -94,3 +94,12 @@ export const registerLocks = pgTable("register_locks", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+export const registerRekapitulasi = pgTable("register_rekapitulasi", {
+  id: serial("id").primaryKey(),
+  registerCode: text("register_code").notNull(),
+  periodKey: text("period_key").notNull(),
+  dataJson: text("data_json").notNull(), // JSON string of Record<string, number | string>
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+

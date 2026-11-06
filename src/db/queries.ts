@@ -1,7 +1,7 @@
 import { db, createPool } from "./index.js";
-import { officers, registerEntries, registers, settings, storageCodes, registerLocks } from "./schema.js";
+import { officers, registerEntries, registers, settings, storageCodes, registerLocks, registerRekapitulasi } from "./schema.js";
 import { eq, desc, asc, and, inArray, sql } from "drizzle-orm";
-import { Officer, AppSettings, StorageCodeMapping, RegisterLock, ArchiveYearStats, DatabaseArchiveStats, ArchivePackage } from "../types.js";
+import { Officer, AppSettings, StorageCodeMapping, RegisterLock, RegisterRekapitulasiRecord, ArchiveYearStats, DatabaseArchiveStats, ArchivePackage } from "../types.js";
 import { DEFAULT_SETTINGS, INITIAL_OFFICERS, REGISTER_DEFINITIONS } from "../lib/constants.js";
 
 export async function ensureTablesExist(): Promise<void> {
@@ -91,9 +91,20 @@ export async function ensureTablesExist(): Promise<void> {
         UNIQUE(register_code, period_key)
       );
 
+      CREATE TABLE IF NOT EXISTS register_rekapitulasi (
+        id SERIAL PRIMARY KEY,
+        register_code TEXT NOT NULL,
+        period_key TEXT NOT NULL,
+        data_json TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW(),
+        UNIQUE(register_code, period_key)
+      );
+
       CREATE INDEX IF NOT EXISTS idx_reg_entries_code ON register_entries (register_code);
       CREATE INDEX IF NOT EXISTS idx_reg_entries_code_urut ON register_entries (register_code, nomor_urut);
       CREATE INDEX IF NOT EXISTS idx_reg_locks_lookup ON register_locks (register_code, period_key);
+      CREATE INDEX IF NOT EXISTS idx_reg_rekap_lookup ON register_rekapitulasi (register_code, period_key);
       CREATE INDEX IF NOT EXISTS idx_storage_codes_lookup ON storage_codes (kode);
     `);
     console.log("Database tables and indexes verified/initialized successfully.");
@@ -1092,4 +1103,129 @@ export async function restoreArchivePackage(
     throw new Error(`Failed to restore archive package: ${error}`, { cause: error });
   }
 }
+
+export async function getRegisterRekapitulasi(
+  registerCode: string,
+  periodKey: string
+): Promise<RegisterRekapitulasiRecord | null> {
+  try {
+    const list = await db
+      .select()
+      .from(registerRekapitulasi)
+      .where(
+        and(
+          eq(registerRekapitulasi.registerCode, registerCode),
+          eq(registerRekapitulasi.periodKey, periodKey)
+        )
+      )
+      .limit(1);
+
+    if (list.length === 0) return null;
+    const item = list[0];
+    let parsedData: Record<string, number | string> = {};
+    try {
+      parsedData = JSON.parse(item.dataJson || "{}");
+    } catch (e) {
+      console.error("Failed to parse rekapitulasi dataJson:", e);
+    }
+
+    return {
+      id: item.id,
+      registerCode: item.registerCode,
+      periodKey: item.periodKey,
+      data: parsedData,
+      createdAt: item.createdAt ? item.createdAt.toISOString() : null,
+      updatedAt: item.updatedAt ? item.updatedAt.toISOString() : null,
+    };
+  } catch (error) {
+    console.error("Failed to get register rekapitulasi:", error);
+    return null;
+  }
+}
+
+export async function saveRegisterRekapitulasi(
+  registerCode: string,
+  periodKey: string,
+  data: Record<string, number | string>
+): Promise<RegisterRekapitulasiRecord> {
+  try {
+    const existing = await db
+      .select()
+      .from(registerRekapitulasi)
+      .where(
+        and(
+          eq(registerRekapitulasi.registerCode, registerCode),
+          eq(registerRekapitulasi.periodKey, periodKey)
+        )
+      )
+      .limit(1);
+
+    const dataJson = JSON.stringify(data);
+    const now = new Date();
+
+    if (existing.length > 0) {
+      await db
+        .update(registerRekapitulasi)
+        .set({
+          dataJson,
+          updatedAt: now,
+        })
+        .where(eq(registerRekapitulasi.id, existing[0].id));
+
+      return {
+        id: existing[0].id,
+        registerCode,
+        periodKey,
+        data,
+        createdAt: existing[0].createdAt ? existing[0].createdAt.toISOString() : null,
+        updatedAt: now.toISOString(),
+      };
+    } else {
+      const inserted = await db
+        .insert(registerRekapitulasi)
+        .values({
+          registerCode,
+          periodKey,
+          dataJson,
+          createdAt: now,
+          updatedAt: now,
+        })
+        .returning();
+
+      const item = inserted[0];
+      return {
+        id: item.id,
+        registerCode: item.registerCode,
+        periodKey: item.periodKey,
+        data,
+        createdAt: item.createdAt ? item.createdAt.toISOString() : null,
+        updatedAt: item.updatedAt ? item.updatedAt.toISOString() : null,
+      };
+    }
+  } catch (error) {
+    console.error("Failed to save register rekapitulasi:", error);
+    throw error;
+  }
+}
+
+export async function deleteRegisterRekapitulasi(
+  registerCode: string,
+  periodKey: string
+): Promise<boolean> {
+  try {
+    await db
+      .delete(registerRekapitulasi)
+      .where(
+        and(
+          eq(registerRekapitulasi.registerCode, registerCode),
+          eq(registerRekapitulasi.periodKey, periodKey)
+        )
+      );
+    return true;
+  } catch (error) {
+    console.error("Failed to delete register rekapitulasi:", error);
+    return false;
+  }
+}
+
 

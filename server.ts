@@ -27,6 +27,9 @@ import {
   getRegisterLock,
   saveRegisterLock,
   unlockRegister,
+  getRegisterRekapitulasi,
+  saveRegisterRekapitulasi,
+  deleteRegisterRekapitulasi,
   getDatabaseArchiveStats,
   exportYearArchive,
   purgeYearData,
@@ -473,6 +476,72 @@ async function startServer() {
       console.error("Error unlocking register:", error);
       res.status(500).json({
         error: getErrorMessage(error, "Failed to unlock register"),
+      });
+    }
+  });
+
+  // Register Rekapitulasi Manual Override
+  app.get("/api/register-rekapitulasi", async (req, res) => {
+    try {
+      const registerCode = req.query.registerCode as string | undefined;
+      const periodKey = req.query.periodKey as string | undefined;
+
+      if (!registerCode || !periodKey) {
+        return res.status(400).json({
+          error: "registerCode dan periodKey wajib diisi.",
+        });
+      }
+
+      const record = await getRegisterRekapitulasi(registerCode, periodKey);
+      res.json(record);
+    } catch (error: unknown) {
+      console.error("Error getting register rekapitulasi:", error);
+      res.status(500).json({
+        error: getErrorMessage(error, "Failed to fetch register rekapitulasi"),
+      });
+    }
+  });
+
+  app.post("/api/register-rekapitulasi", async (req, res) => {
+    try {
+      const { registerCode, periodKey, data } = req.body;
+
+      if (!registerCode || !periodKey || !data || typeof data !== "object") {
+        return res.status(400).json({
+          error: "registerCode, periodKey, dan data wajib diisi.",
+        });
+      }
+
+      const saved = await saveRegisterRekapitulasi(registerCode, periodKey, data);
+      res.json(saved);
+    } catch (error: unknown) {
+      console.error("Error saving register rekapitulasi:", error);
+      res.status(500).json({
+        error: getErrorMessage(error, "Failed to save register rekapitulasi"),
+      });
+    }
+  });
+
+  app.delete("/api/register-rekapitulasi", async (req, res) => {
+    try {
+      const registerCode = (req.query.registerCode || req.body?.registerCode) as string | undefined;
+      const periodKey = (req.query.periodKey || req.body?.periodKey) as string | undefined;
+
+      if (!registerCode || !periodKey) {
+        return res.status(400).json({
+          error: "registerCode dan periodKey wajib diisi.",
+        });
+      }
+
+      const success = await deleteRegisterRekapitulasi(registerCode, periodKey);
+      res.json({
+        success,
+        message: "Rekapitulasi manual berhasil direset ke hitungan otomatis.",
+      });
+    } catch (error: unknown) {
+      console.error("Error deleting register rekapitulasi:", error);
+      res.status(500).json({
+        error: getErrorMessage(error, "Failed to delete register rekapitulasi"),
       });
     }
   });
