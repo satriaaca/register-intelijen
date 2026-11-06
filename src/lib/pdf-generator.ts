@@ -255,7 +255,8 @@ export function generateRegisterPdf(options: GeneratePdfOptions): jsPDF {
     });
   }
 
-  // Fungsi menggambar judul dan kop register
+  // Fungsi menggambar judul dan kop register.
+  // Mengembalikan posisi Y tepat di bawah header (dinamis mengikuti tinggi judul).
   const drawPageHeader = (docInstance: jsPDF, _pageNum: number) => {
     docInstance.setDrawColor(40, 40, 40);
     docInstance.setLineWidth(0.3);
@@ -306,6 +307,21 @@ export function generateRegisterPdf(options: GeneratePdfOptions): jsPDF {
     currentY += 3.5;
 
     return currentY + 2;
+  };
+
+  // Border luar halaman (Bingkai Register Resmi)
+  const drawPageBorder = () => {
+    doc.setDrawColor(60, 60, 60);
+    doc.setLineWidth(0.4);
+    doc.rect(marginX - 4, marginTop - 4, contentWidth + 8, pageHeight - (marginTop + marginBottom) + 8);
+  };
+
+  // Pindah ke halaman baru, gambar header + bingkai, dan kembalikan posisi Y di bawah header
+  const addPageWithHeader = (): number => {
+    doc.addPage();
+    const y = drawPageHeader(doc, (doc as any).internal.getNumberOfPages());
+    drawPageBorder();
+    return y + GAP_AFTER_TABLE;
   };
 
   const startY = drawPageHeader(doc, 1);
@@ -421,11 +437,7 @@ export function generateRegisterPdf(options: GeneratePdfOptions): jsPDF {
       if (data.pageNumber > 1) {
         drawPageHeader(doc, data.pageNumber);
       }
-
-      // Border luar halaman (Bingkai Register Resmi)
-      doc.setDrawColor(60, 60, 60);
-      doc.setLineWidth(0.4);
-      doc.rect(marginX - 4, marginTop - 4, contentWidth + 8, pageHeight - (marginTop + marginBottom) + 8);
+      drawPageBorder();
     },
   });
 
@@ -463,9 +475,10 @@ export function generateRegisterPdf(options: GeneratePdfOptions): jsPDF {
   const closingHeight = splitClosing.length * 4;
 
   if (finalY + closingHeight > pageBottomLimit) {
-    doc.addPage();
-    drawPageHeader(doc, (doc as any).internal.getNumberOfPages());
-    finalY = marginTop + 25;
+    finalY = addPageWithHeader();
+    // font di-set ulang karena drawPageHeader mengubah font/ukuran
+    doc.setFont("helvetica", "italic");
+    doc.setFontSize(8);
   }
 
   doc.setTextColor(50, 50, 50);
@@ -477,9 +490,7 @@ export function generateRegisterPdf(options: GeneratePdfOptions): jsPDF {
   if (register.hasRekapitulasi && register.rekapitulasiFields) {
     const rekapHeight = 4.5 + register.rekapitulasiFields.length * 4 + 4;
     if (finalY + rekapHeight > pageBottomLimit) {
-      doc.addPage();
-      drawPageHeader(doc, (doc as any).internal.getNumberOfPages());
-      finalY = marginTop + 25;
+      finalY = addPageWithHeader();
     }
 
     doc.setFont("helvetica", "bold");
@@ -543,9 +554,7 @@ export function generateRegisterPdf(options: GeneratePdfOptions): jsPDF {
     6; // nama + pangkat/NIP
 
   if (finalY + signatureHeight > pageBottomLimit) {
-    doc.addPage();
-    drawPageHeader(doc, (doc as any).internal.getNumberOfPages());
-    finalY = marginTop + 25;
+    finalY = addPageWithHeader();
   }
 
   // ===== Tanda Tangan =====
