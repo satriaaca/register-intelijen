@@ -480,10 +480,10 @@ async function startServer() {
     }
   });
 
-  // Register Rekapitulasi Manual Override
-  app.get("/api/register-rekapitulasi", async (req, res) => {
+  // Register Rekapitulasi Manual Override (Mendukung /api/register-rekapitulasi dan /api/registers/:code/rekapitulasi)
+  const handleGetRekapitulasi = async (req: express.Request, res: express.Response) => {
     try {
-      const registerCode = req.query.registerCode as string | undefined;
+      const registerCode = (req.params.code || req.query.registerCode) as string | undefined;
       const periodKey = req.query.periodKey as string | undefined;
 
       if (!registerCode || !periodKey) {
@@ -500,11 +500,12 @@ async function startServer() {
         error: getErrorMessage(error, "Failed to fetch register rekapitulasi"),
       });
     }
-  });
+  };
 
-  app.post("/api/register-rekapitulasi", async (req, res) => {
+  const handlePostRekapitulasi = async (req: express.Request, res: express.Response) => {
     try {
-      const { registerCode, periodKey, data } = req.body;
+      const registerCode = (req.params.code || req.body?.registerCode) as string | undefined;
+      const { periodKey, data } = req.body;
 
       if (!registerCode || !periodKey || !data || typeof data !== "object") {
         return res.status(400).json({
@@ -520,11 +521,11 @@ async function startServer() {
         error: getErrorMessage(error, "Failed to save register rekapitulasi"),
       });
     }
-  });
+  };
 
-  app.delete("/api/register-rekapitulasi", async (req, res) => {
+  const handleDeleteRekapitulasi = async (req: express.Request, res: express.Response) => {
     try {
-      const registerCode = (req.query.registerCode || req.body?.registerCode) as string | undefined;
+      const registerCode = (req.params.code || req.query.registerCode || req.body?.registerCode) as string | undefined;
       const periodKey = (req.query.periodKey || req.body?.periodKey) as string | undefined;
 
       if (!registerCode || !periodKey) {
@@ -544,7 +545,14 @@ async function startServer() {
         error: getErrorMessage(error, "Failed to delete register rekapitulasi"),
       });
     }
-  });
+  };
+
+  app.get("/api/register-rekapitulasi", handleGetRekapitulasi);
+  app.get("/api/registers/:code/rekapitulasi", handleGetRekapitulasi);
+  app.post("/api/register-rekapitulasi", handlePostRekapitulasi);
+  app.post("/api/registers/:code/rekapitulasi", handlePostRekapitulasi);
+  app.delete("/api/register-rekapitulasi", handleDeleteRekapitulasi);
+  app.delete("/api/registers/:code/rekapitulasi", handleDeleteRekapitulasi);
 
   // Archive & Database Retention Management (Khusus akun hijau.kn.tabanan@gmail)
   const handleArchiveStats = async (_req: express.Request, res: express.Response) => {

@@ -31,6 +31,15 @@ export const DEFAULT_ALLOWED_EMAILS: WhitelistEmailConfig[] = [
         note: "Akun Administrator Sistem",
         isActive: true,
     },
+    {
+        email: "satria.aca@gmail.com",
+        name: "Satria / Admin Intelijen Tabanan",
+        role: "Administrator",
+        unit: "Administrator Sistem Intelijen Kejaksaan Negeri Tabanan",
+        nip: "19820514 200703 1 001",
+        note: "Akun Pengguna Sistem",
+        isActive: true,
+    },
 
         {
         email: "intelijenkejaritabanan@gmail.com",
