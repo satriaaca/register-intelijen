@@ -11,6 +11,7 @@ import {
     getRegisterEntries,
     saveRegisterEntry,
     deleteRegisterEntry,
+    deleteRegisterEntriesBatch,
     importRegisterEntriesBatch,
     getRegistersSummary,
     getStorageCodes,
@@ -21,6 +22,9 @@ import {
     getRegisterLock,
     saveRegisterLock,
     unlockRegister,
+    getRegisterRekapitulasi,
+    saveRegisterRekapitulasi,
+    deleteRegisterRekapitulasi,
     getDatabaseArchiveStats,
     exportYearArchive,
     purgeYearData,
@@ -43,6 +47,7 @@ function parseId(value: string): number | null {
 const app = express();
 
 app.use(express.json({ limit: "5mb" }));
+app.use(express.urlencoded({ extended: true, limit: "5mb" }));
 
 let initialized: Promise<void> | null = null;
 
@@ -84,10 +89,14 @@ app.get("/api/health", (_req, res) => {
 
 app.use("/api", requireAuth);
 
+// ---------------------------------------------------------------------------
+// Settings
+// ---------------------------------------------------------------------------
 app.get("/api/settings", async (_req, res) => {
     try {
         res.json(await getSettings());
     } catch (error) {
+        console.error("Error fetching settings:", error);
         res.status(500).json({
             error: getErrorMessage(error, "Failed to fetch settings"),
         });
@@ -98,16 +107,21 @@ app.post("/api/settings", async (req, res) => {
     try {
         res.json(await updateSettings(req.body));
     } catch (error) {
+        console.error("Error updating settings:", error);
         res.status(500).json({
             error: getErrorMessage(error, "Failed to update settings"),
         });
     }
 });
 
+// ---------------------------------------------------------------------------
+// Officers
+// ---------------------------------------------------------------------------
 app.get("/api/officers", async (_req, res) => {
     try {
         res.json(await getOfficers());
     } catch (error) {
+        console.error("Error fetching officers:", error);
         res.status(500).json({
             error: getErrorMessage(error, "Failed to fetch officers"),
         });
@@ -127,6 +141,7 @@ app.post("/api/officers", async (req, res) => {
         const created = await createOfficer({ nama, pangkat, nip, jabatan });
         res.status(201).json(created);
     } catch (error) {
+        console.error("Error creating officer:", error);
         res.status(500).json({
             error: getErrorMessage(error, "Failed to create officer"),
         });
@@ -143,6 +158,7 @@ app.put("/api/officers/:id", async (req, res) => {
 
         res.json(await updateOfficer(id, req.body));
     } catch (error) {
+        console.error("Error updating officer:", error);
         res.status(500).json({
             error: getErrorMessage(error, "Failed to update officer"),
         });
@@ -160,12 +176,16 @@ app.delete("/api/officers/:id", async (req, res) => {
         await deleteOfficer(id);
         res.json({ success: true });
     } catch (error) {
+        console.error("Error deleting officer:", error);
         res.status(500).json({
             error: getErrorMessage(error, "Failed to delete officer"),
         });
     }
 });
 
+// ---------------------------------------------------------------------------
+// Register metadata
+// ---------------------------------------------------------------------------
 app.get("/api/registers", async (_req, res) => {
     try {
         const summary = await getRegistersSummary();
@@ -177,16 +197,21 @@ app.get("/api/registers", async (_req, res) => {
 
         res.json({ registers, summary });
     } catch (error) {
+        console.error("Error fetching registers:", error);
         res.status(500).json({
             error: getErrorMessage(error, "Failed to fetch registers"),
         });
     }
 });
 
+// ---------------------------------------------------------------------------
+// Register entries
+// ---------------------------------------------------------------------------
 app.get("/api/registers/:code/entries", async (req, res) => {
     try {
         res.json(await getRegisterEntries(req.params.code));
     } catch (error) {
+        console.error(`Error fetching entries for ${req.params.code}:`, error);
         res.status(500).json({
             error: getErrorMessage(error, "Failed to fetch entries"),
         });
@@ -207,11 +232,51 @@ app.post("/api/registers/:code/entries", async (req, res) => {
 
         res.json(saved);
     } catch (error) {
+        console.error(`Error saving entry for ${req.params.code}:`, error);
         res.status(500).json({
             error: getErrorMessage(error, "Failed to save entry"),
         });
     }
 });
+
+// Batch delete. Harus didaftarkan SEBELUM DELETE /entries/:id
+// agar "batch-delete" tidak tertangkap sebagai :id.
+const handleBatchDeleteEntries = async (req: express.Request, res: express.Response) => {
+    try {
+        const rawIds = req.body?.ids || req.body?.entryIds;
+
+        if (!Array.isArray(rawIds) || rawIds.length === 0) {
+            return res.status(400).json({
+                error: "Daftar ID baris register tidak valid atau kosong.",
+            });
+        }
+
+        const numericIds = rawIds
+            .map((val: unknown) => Number(val))
+            .filter((num: number) => !isNaN(num) && num > 0);
+
+        if (numericIds.length === 0) {
+            return res.status(400).json({
+                error: "Daftar ID baris register kosong.",
+            });
+        }
+
+        const deletedCount = await deleteRegisterEntriesBatch(numericIds);
+        res.json({ success: true, count: deletedCount });
+    } catch (error: unknown) {
+        console.error("Error batch deleting entries:", error);
+        res.status(500).json({
+            error: getErrorMessage(error, "Failed to batch delete entries"),
+        });
+    }
+};
+
+app.post("/api/registers/:code/entries/batch-delete", handleBatchDeleteEntries);
+app.post("/api/registers/:code/batch-delete", handleBatchDeleteEntries);
+app.delete("/api/registers/:code/entries/batch-delete", handleBatchDeleteEntries);
+app.delete("/api/registers/:code/batch-delete", handleBatchDeleteEntries);
+app.post("/api/registers/batch-delete", handleBatchDeleteEntries);
+app.delete("/api/registers/batch-delete", handleBatchDeleteEntries);
 
 app.delete("/api/registers/:code/entries/:id", async (req, res) => {
     try {
@@ -226,16 +291,21 @@ app.delete("/api/registers/:code/entries/:id", async (req, res) => {
         await deleteRegisterEntry(id);
         res.json({ success: true });
     } catch (error) {
+        console.error(`Error deleting entry ${req.params.id}:`, error);
         res.status(500).json({
             error: getErrorMessage(error, "Failed to delete entry"),
         });
     }
 });
 
+// ---------------------------------------------------------------------------
+// Storage codes
+// ---------------------------------------------------------------------------
 app.get("/api/storage-codes", async (_req, res) => {
     try {
         res.json(await getStorageCodes());
     } catch (error) {
+        console.error("Error getting storage codes:", error);
         res.status(500).json({
             error: getErrorMessage(error, "Failed to fetch storage codes"),
         });
@@ -255,6 +325,7 @@ app.post("/api/storage-codes", async (req, res) => {
         const created = await saveStorageCode({ kode, asal, keterangan });
         res.status(201).json(created);
     } catch (error) {
+        console.error("Error saving storage code:", error);
         res.status(500).json({
             error: getErrorMessage(error, "Failed to save storage code"),
         });
@@ -280,6 +351,7 @@ app.put("/api/storage-codes/:id", async (req, res) => {
 
         res.json(await saveStorageCode({ id, kode, asal, keterangan }));
     } catch (error) {
+        console.error("Error updating storage code:", error);
         res.status(500).json({
             error: getErrorMessage(error, "Failed to update storage code"),
         });
@@ -299,13 +371,16 @@ app.delete("/api/storage-codes/:id", async (req, res) => {
         await deleteStorageCode(id);
         res.json({ success: true });
     } catch (error) {
+        console.error("Error deleting storage code:", error);
         res.status(500).json({
             error: getErrorMessage(error, "Failed to delete storage code"),
         });
     }
 });
 
-// Register Locks
+// ---------------------------------------------------------------------------
+// Register Locks (Penandatangan Terkunci)
+// ---------------------------------------------------------------------------
 app.get("/api/register-locks", async (req, res) => {
     try {
         const registerCode = req.query.registerCode as string | undefined;
@@ -319,6 +394,7 @@ app.get("/api/register-locks", async (req, res) => {
         const list = await getRegisterLocks(registerCode);
         res.json(list);
     } catch (error) {
+        console.error("Error getting register locks:", error);
         res.status(500).json({
             error: getErrorMessage(error, "Failed to fetch register locks"),
         });
@@ -367,6 +443,7 @@ app.post("/api/register-locks", async (req, res) => {
 
         res.status(200).json(saved);
     } catch (error) {
+        console.error("Error saving register lock:", error);
         res.status(500).json({
             error: getErrorMessage(error, "Failed to save register lock"),
         });
@@ -386,12 +463,93 @@ app.post("/api/register-locks/unlock", async (req, res) => {
         await unlockRegister(registerCode, periodKey);
         res.json({ success: true, message: "Kunci register berhasil dibuka." });
     } catch (error) {
+        console.error("Error unlocking register:", error);
         res.status(500).json({
             error: getErrorMessage(error, "Failed to unlock register"),
         });
     }
 });
 
+// ---------------------------------------------------------------------------
+// Register Rekapitulasi Manual Override
+// (mendukung /api/register-rekapitulasi dan /api/registers/:code/rekapitulasi)
+// ---------------------------------------------------------------------------
+const handleGetRekapitulasi = async (req: express.Request, res: express.Response) => {
+    try {
+        const registerCode = (req.params.code || req.query.registerCode) as string | undefined;
+        const periodKey = req.query.periodKey as string | undefined;
+
+        if (!registerCode || !periodKey) {
+            return res.status(400).json({
+                error: "registerCode dan periodKey wajib diisi.",
+            });
+        }
+
+        const record = await getRegisterRekapitulasi(registerCode, periodKey);
+        res.json(record);
+    } catch (error: unknown) {
+        console.error("Error getting register rekapitulasi:", error);
+        res.status(500).json({
+            error: getErrorMessage(error, "Failed to fetch register rekapitulasi"),
+        });
+    }
+};
+
+const handlePostRekapitulasi = async (req: express.Request, res: express.Response) => {
+    try {
+        const registerCode = (req.params.code || req.body?.registerCode) as string | undefined;
+        const { periodKey, data } = req.body;
+
+        if (!registerCode || !periodKey || !data || typeof data !== "object") {
+            return res.status(400).json({
+                error: "registerCode, periodKey, dan data wajib diisi.",
+            });
+        }
+
+        const saved = await saveRegisterRekapitulasi(registerCode, periodKey, data);
+        res.json(saved);
+    } catch (error: unknown) {
+        console.error("Error saving register rekapitulasi:", error);
+        res.status(500).json({
+            error: getErrorMessage(error, "Failed to save register rekapitulasi"),
+        });
+    }
+};
+
+const handleDeleteRekapitulasi = async (req: express.Request, res: express.Response) => {
+    try {
+        const registerCode = (req.params.code || req.query.registerCode || req.body?.registerCode) as string | undefined;
+        const periodKey = (req.query.periodKey || req.body?.periodKey) as string | undefined;
+
+        if (!registerCode || !periodKey) {
+            return res.status(400).json({
+                error: "registerCode dan periodKey wajib diisi.",
+            });
+        }
+
+        const success = await deleteRegisterRekapitulasi(registerCode, periodKey);
+        res.json({
+            success,
+            message: "Rekapitulasi manual berhasil direset ke hitungan otomatis.",
+        });
+    } catch (error: unknown) {
+        console.error("Error deleting register rekapitulasi:", error);
+        res.status(500).json({
+            error: getErrorMessage(error, "Failed to delete register rekapitulasi"),
+        });
+    }
+};
+
+app.get("/api/register-rekapitulasi", handleGetRekapitulasi);
+app.get("/api/registers/:code/rekapitulasi", handleGetRekapitulasi);
+app.post("/api/register-rekapitulasi", handlePostRekapitulasi);
+app.post("/api/registers/:code/rekapitulasi", handlePostRekapitulasi);
+app.delete("/api/register-rekapitulasi", handleDeleteRekapitulasi);
+app.delete("/api/registers/:code/rekapitulasi", handleDeleteRekapitulasi);
+
+// ---------------------------------------------------------------------------
+// Batch import
+// ---------------------------------------------------------------------------
 app.post("/api/registers/:code/import-batch", async (req, res) => {
     try {
         const { entries, clearExisting } = req.body;
@@ -410,13 +568,16 @@ app.post("/api/registers/:code/import-batch", async (req, res) => {
 
         res.json(result);
     } catch (error) {
+        console.error(`Error importing batch for ${req.params.code}:`, error);
         res.status(500).json({
             error: getErrorMessage(error, "Failed to import entries batch"),
         });
     }
 });
 
-// Archive & Database Retention Management (Khusus akun hijau.kn.tabanan@gmail.com)
+// ---------------------------------------------------------------------------
+// Archive & Database Retention Management (khusus akun super admin arsip)
+// ---------------------------------------------------------------------------
 const handleArchiveStats = async (_req: express.Request, res: express.Response) => {
     try {
         const stats = await getDatabaseArchiveStats();
