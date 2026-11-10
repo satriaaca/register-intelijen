@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
-import { AppSettings, RegisterDefinition, RegisterLock } from "../types.js";
+import { AppSettings, RegisterDefinition, RegisterLock, Officer } from "../types.js";
 import { DEFAULT_SETTINGS } from "../lib/constants.js";
-import { Lock, Unlock, ShieldAlert, Check, X, Info } from "lucide-react";
+import { Lock, Unlock, ShieldAlert, Check, X, Info, UserCheck } from "lucide-react";
 import { authFetch } from "../lib/api.js";
 
 interface LockRegisterModalProps {
@@ -17,6 +17,7 @@ interface LockRegisterModalProps {
   selectedYear?: number;
   selectedMonth?: number | "all";
   currentLock: RegisterLock | null;
+  officers?: Officer[];
   onLockUpdated?: () => void;
   onLockSaved?: (updatedLock: RegisterLock | null) => void;
 }
@@ -32,11 +33,27 @@ export const LockRegisterModal: React.FC<LockRegisterModalProps> = ({
   activeClosingDate,
   defaultClosingDate,
   currentLock,
+  officers = [],
   onLockUpdated,
   onLockSaved,
 }) => {
   const safeSettings: AppSettings = currentSettings || settings || (DEFAULT_SETTINGS as AppSettings);
   const safeClosingDate = defaultClosingDate || activeClosingDate || new Date().toISOString().split("T")[0];
+
+  const [availableOfficers, setAvailableOfficers] = useState<Officer[]>(officers);
+
+  useEffect(() => {
+    if (officers && officers.length > 0) {
+      setAvailableOfficers(officers);
+    } else if (isOpen) {
+      void authFetch("/api/officers")
+        .then((res) => (res.ok ? res.json() : []))
+        .then((data) => {
+          if (Array.isArray(data)) setAvailableOfficers(data);
+        })
+        .catch(() => {});
+    }
+  }, [isOpen, officers]);
 
   const [leftSignerTitle, setLeftSignerTitle] = useState("");
   const [leftSignerName, setLeftSignerName] = useState("");
@@ -224,6 +241,39 @@ export const LockRegisterModal: React.FC<LockRegisterModalProps> = ({
               </span>
             </div>
             <div className="space-y-2">
+              {!isCurrentlyLocked && availableOfficers.length > 0 && (
+                <div className="rounded bg-emerald-50/70 border border-emerald-200 p-2 space-y-1">
+                  <label className="text-[10px] font-bold text-emerald-900 uppercase flex items-center gap-1">
+                    <UserCheck className="w-3 h-3 text-emerald-700" />
+                    Pilih Pejabat Pimpinan dari Database
+                  </label>
+                  <select
+                    defaultValue=""
+                    onChange={(e) => {
+                      const selectedId = Number(e.target.value);
+                      const off = availableOfficers.find((o) => o.id === selectedId);
+                      if (off) {
+                        setLeftSignerName(off.nama);
+                        const cleanNip = off.nip.replace(/^NIP\.?\s*/i, "").trim();
+                        setLeftSignerPangkatNip(`${off.pangkat} / NIP. ${cleanNip}`);
+                        if (off.jabatan) {
+                          setLeftSignerTitle(`Mengetahui:\n${off.jabatan.toUpperCase()}`);
+                        }
+                      }
+                      e.target.value = "";
+                    }}
+                    className="w-full px-2 py-1 text-xs bg-white border border-emerald-300 rounded text-slate-800 focus:outline-none focus:ring-1 focus:ring-emerald-600"
+                  >
+                    <option value="">-- Pilih Pejabat Pimpinan ({availableOfficers.length} Pegawai) --</option>
+                    {availableOfficers.map((o) => (
+                      <option key={o.id} value={o.id}>
+                        {o.nama} ({o.jabatan || o.pangkat})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
               <div>
                 <label className="block text-[10px] font-bold uppercase text-slate-600 mb-0.5">Jabatan / Instansi</label>
                 <input
@@ -283,6 +333,39 @@ export const LockRegisterModal: React.FC<LockRegisterModalProps> = ({
               </span>
             </div>
             <div className="space-y-2">
+              {!isCurrentlyLocked && availableOfficers.length > 0 && (
+                <div className="rounded bg-emerald-50/70 border border-emerald-200 p-2 space-y-1">
+                  <label className="text-[10px] font-bold text-emerald-900 uppercase flex items-center gap-1">
+                    <UserCheck className="w-3 h-3 text-emerald-700" />
+                    Pilih Pejabat Pengesah dari Database
+                  </label>
+                  <select
+                    defaultValue=""
+                    onChange={(e) => {
+                      const selectedId = Number(e.target.value);
+                      const off = availableOfficers.find((o) => o.id === selectedId);
+                      if (off) {
+                        setRightSignerName(off.nama);
+                        const cleanNip = off.nip.replace(/^NIP\.?\s*/i, "").trim();
+                        setRightSignerPangkatNip(`${off.pangkat} / NIP. ${cleanNip}`);
+                        if (off.jabatan) {
+                          setRightSignerTitle(off.jabatan.toUpperCase());
+                        }
+                      }
+                      e.target.value = "";
+                    }}
+                    className="w-full px-2 py-1 text-xs bg-white border border-emerald-300 rounded text-slate-800 focus:outline-none focus:ring-1 focus:ring-emerald-600"
+                  >
+                    <option value="">-- Pilih Pejabat Pengesah ({availableOfficers.length} Pegawai) --</option>
+                    {availableOfficers.map((o) => (
+                      <option key={o.id} value={o.id}>
+                        {o.nama} ({o.jabatan || o.pangkat})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
               <div>
                 <label className="block text-[10px] font-bold uppercase text-slate-600 mb-0.5">Jabatan / Instansi</label>
                 <input

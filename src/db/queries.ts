@@ -545,7 +545,7 @@ export async function getRegistersSummary() {
   } catch (error) {
     console.error("Failed to get registers summary:", error);
     return {
-      totalRegisters: 23,
+      totalRegisters: 22,
       totalEntries: 0,
       totalOfficers: 0,
       countsByRegister: {},

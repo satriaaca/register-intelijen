@@ -60,7 +60,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             </div>
 
             <p className="hidden truncate text-[10px] text-slate-500 sm:block">
-              Kejaksaan Negeri Tabanan · Administrasi R.IN.1–R.IN.23
+              Kejaksaan Negeri Tabanan · Administrasi R.IN.1–R.IN.22
             </p>
           </div>
         </div>

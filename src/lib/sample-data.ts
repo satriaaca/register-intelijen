@@ -236,7 +236,6 @@ export const SAMPLE_CSV_MAP: Record<string, string> = {
   "R.IN.20": SAMPLE_RIN20_CSV,
   "R.IN.21": SAMPLE_RIN21_CSV,
   "R.IN.22": SAMPLE_RIN22_CSV,
-  "R.IN.23": SAMPLE_RIN23_CSV,
 };
 
 export function getSampleCsvForRegister(code: string): string {

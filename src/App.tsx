@@ -582,6 +582,7 @@ export default function App() {
             {activeTab === "settings" && (
               <SettingsManager
                 settings={settings}
+                officers={officers}
                 onUpdateSettings={handleUpdateSettings}
                 onOpenArchiveManager={isArchiveSuperAdmin ? () => setIsArchiveManagerOpen(true) : undefined}
                 canManageArchive={isArchiveSuperAdmin}
@@ -595,7 +596,7 @@ export default function App() {
         <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-1.5 sm:flex-row">
           <span>
             Buku Register Administrasi Intelijen Kejaksaan RI — Standardisasi
-            R.IN.1 s/d R.IN.23
+            R.IN.1 s/d R.IN.22
           </span>
 
           <span className="font-mono font-medium text-emerald-400/90">

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { RegisterDefinition, RegisterEntryRow, Officer, ColumnDefinition, RIN3_CATEGORIES } from "../types.js";
-import { X, Check, Calendar, Clock, Users, Plus, Trash2, Layers } from "lucide-react";
+import { X, Check, Calendar, Clock, Users, Plus, Trash2, Layers, CheckSquare, Square } from "lucide-react";
 import {
   RIN3_CATEGORY_CODE_MAP,
   detectCategoryFromLetterCode,
@@ -353,6 +353,44 @@ export const EntryFormModal: React.FC<EntryFormModalProps> = ({
               />
             )}
           </div>
+
+          {!isLocked && officers.length > 0 && (
+            <div className="flex flex-wrap items-center justify-between gap-1.5 pt-1 border-t border-slate-200/80 text-[11px]">
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const targetIds = filteredOfficers.map((o) => o.id);
+                    const merged = Array.from(new Set([...selectedIds, ...targetIds]));
+                    handleChange(col.key, merged);
+                  }}
+                  className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-800 bg-emerald-100/80 hover:bg-emerald-200/80 px-2 py-0.5 rounded border border-emerald-300 transition-colors cursor-pointer"
+                  title="Pilih seluruh petugas pada daftar"
+                >
+                  <CheckSquare className="w-3 h-3 text-emerald-700" />
+                  Pilih Semua {filteredOfficers.length < officers.length ? `(${filteredOfficers.length} Hasil)` : `(${officers.length})`}
+                </button>
+
+                {selectedIds.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleChange(col.key, []);
+                    }}
+                    className="inline-flex items-center gap-1 text-[10px] font-medium text-slate-600 hover:text-red-700 bg-white hover:bg-red-50 px-2 py-0.5 rounded border border-slate-300 hover:border-red-300 transition-colors cursor-pointer"
+                    title="Kosongkan seluruh petugas terpilih"
+                  >
+                    <Square className="w-3 h-3 text-slate-400" />
+                    Hapus Pilihan ({selectedIds.length})
+                  </button>
+                )}
+              </div>
+
+              <span className="text-[10px] text-slate-500 font-medium">
+                {selectedIds.length} dari {officers.length} petugas dipilih
+              </span>
+            </div>
+          )}
 
           {/* Selected Badges */}
           {selectedIds.length > 0 && (

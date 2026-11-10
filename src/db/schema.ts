@@ -46,7 +46,7 @@ export const settings = pgTable("settings", {
 
 export const registers = pgTable("registers", {
   id: serial("id").primaryKey(),
-  code: text("code").notNull().unique(), // R.IN.1 to R.IN.23
+  code: text("code").notNull().unique(), // R.IN.1 to R.IN.22
   title: text("title").notNull(),
   orientation: text("orientation").notNull().default("portrait"), // portrait | landscape
   tahunTakwim: integer("tahun_takwim").notNull().default(2026),

@@ -1693,7 +1693,7 @@ export function transformCsvGeneric(
 }
 
 /**
- * Universal CSV router for all registers (R.IN.1 through R.IN.23).
+ * Universal CSV router for all registers (R.IN.1 through R.IN.22).
  */
 export function transformCsvToRegister(
   rows: string[][],

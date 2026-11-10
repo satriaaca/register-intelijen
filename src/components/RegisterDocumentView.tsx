@@ -2344,6 +2344,7 @@ export const RegisterDocumentView: React.FC<RegisterDocumentViewProps> = ({
         defaultClosingDate={activeClosingDate}
         currentSettings={settings}
         currentLock={currentLock}
+        officers={officers}
         onLockSaved={(updatedLock) => {
           setCurrentLock(updatedLock);
         }}

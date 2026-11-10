@@ -681,21 +681,4 @@ export const REGISTER_DEFINITIONS: RegisterDefinition[] = [
       { key: "keterangan", label: "KET", colNumber: 8, type: "text" },
     ],
   },
-  {
-    code: "R.IN.23",
-    number: 23,
-    title: "REGISTER PENGAWASAN ORANG ASING / MEDIA & INFORMASI INTELIJEN",
-    category: "Operasi Intelijen",
-    orientation: "landscape",
-    notes: "*) Kejaksaan ditulis hanya di sampul depan.",
-    columns: [
-      { key: "no", label: "NO", colNumber: 1, type: "number", widthPercent: 5 },
-      { key: "surat_perintah", label: "SURAT PERINTAH / DASAR TUGAS", colNumber: 2, type: "textarea" },
-      { key: "nama_petugas_ids", label: "NAMA PETUGAS PELAKSANA", colNumber: 3, type: "officer_multi" },
-      { key: "sasaran_objek", label: "SASARAN / OBJEK PENGAWASAN", colNumber: 4, type: "textarea" },
-      { key: "waktu_lokasi", label: "WAKTU & LOKASI PELAKSANAAN", colNumber: 5, type: "text" },
-      { key: "hasil_pengamatan", label: "HASIL PENGAMATAN / TEMUAN", colNumber: 6, type: "textarea" },
-      { key: "keterangan_saran", label: "KET & SARAN TINDAK", colNumber: 7, type: "text" },
-    ],
-  },
 ];

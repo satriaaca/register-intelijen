@@ -661,7 +661,7 @@ export const ArchiveManagerModal: React.FC<ArchiveManagerModalProps> = ({
                         Pengarsipan Tahunan (Export ke JSON)
                       </strong>
                       <p className="text-slate-600 mt-0.5">
-                        Pada akhir tahun atau saat register tahun lama telah ditutup dan ditandatangani, klik <strong>"Unduh Arsip"</strong> pada tab Daftar Tahun. File JSON berisi seluruh entri R.IN.1–R.IN.23 beserta snapshot pejabat penandatangan.
+                        Pada akhir tahun atau saat register tahun lama telah ditutup dan ditandatangani, klik <strong>"Unduh Arsip"</strong> pada tab Daftar Tahun. File JSON berisi seluruh entri R.IN.1–R.IN.22 beserta snapshot pejabat penandatangan.
                       </p>
                     </div>
                   </div>

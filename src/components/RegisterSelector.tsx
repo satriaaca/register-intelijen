@@ -17,7 +17,7 @@ export const RegisterSelector: React.FC<RegisterSelectorProps> = ({
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
 
   const categories = [
-    { id: "all", label: "Semua (23)" },
+    { id: "all", label: `Semua (${registers.length})` },
     { id: "Surat & Berita", label: "Surat & Sandi" },
     { id: "Kerja & Produk", label: "Kerja & Produk" },
     { id: "Kegiatan Intelijen", label: "Kegiatan Intel" },
@@ -41,7 +41,7 @@ export const RegisterSelector: React.FC<RegisterSelectorProps> = ({
         <div className="flex items-center space-x-2">
           <Layers className="w-4 h-4 text-emerald-700" />
           <h2 className="text-xs sm:text-sm font-bold text-slate-800 uppercase tracking-tight">
-            Pilih Buku Register Intelijen RI (23 Format R.IN)
+            Pilih Buku Register Intelijen RI (22 Format R.IN)
           </h2>
         </div>
 
@@ -76,8 +76,8 @@ export const RegisterSelector: React.FC<RegisterSelectorProps> = ({
         ))}
       </div>
 
-      {/* High Density Grid of 23 Register Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 max-h-64 overflow-y-auto pr-1">
+      {/* High Density Grid of 22 Register Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 max-h-[460px] overflow-y-auto pr-1">
         {filteredRegisters.map((reg) => {
           const isSelected = reg.code === selectedCode;
           return (

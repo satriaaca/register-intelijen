@@ -1,10 +1,11 @@
 import React, { useState } from "react";
-import { AppSettings } from "../types.js";
-import { Settings, Save, Check, Building, PenTool, Calendar, Plus, Trash2, AlignCenter, AlignJustify, Database, HardDrive, Download, Upload } from "lucide-react";
+import { AppSettings, Officer } from "../types.js";
+import { Settings, Save, Check, Building, PenTool, Calendar, Plus, Trash2, AlignCenter, AlignJustify, Database, HardDrive, Download, Upload, UserCheck } from "lucide-react";
 import { MONTH_NAMES_ID, getDefaultClosingDate, formatDateIndonesian } from "../lib/date-utils.js";
 
 interface SettingsManagerProps {
   settings: AppSettings;
+  officers?: Officer[];
   onUpdateSettings: (newSettings: Partial<AppSettings>) => Promise<void>;
   onOpenArchiveManager?: () => void;
   canManageArchive?: boolean;
@@ -12,6 +13,7 @@ interface SettingsManagerProps {
 
 export const SettingsManager: React.FC<SettingsManagerProps> = ({
   settings,
+  officers = [],
   onUpdateSettings,
   onOpenArchiveManager,
   canManageArchive = false,
@@ -397,6 +399,39 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
             </h3>
 
             <div className="space-y-2.5">
+              {officers.length > 0 && (
+                <div className="rounded bg-emerald-50/60 border border-emerald-200/80 p-2 space-y-1">
+                  <label className="text-[10px] font-bold text-emerald-900 uppercase flex items-center gap-1">
+                    <UserCheck className="w-3 h-3 text-emerald-700" />
+                    Pilih Cepat dari Database Pegawai
+                  </label>
+                  <select
+                    defaultValue=""
+                    onChange={(e) => {
+                      const selectedId = Number(e.target.value);
+                      const off = officers.find((o) => o.id === selectedId);
+                      if (off) {
+                        handleChange("leftSignerName", off.nama);
+                        const cleanNip = off.nip.replace(/^NIP\.?\s*/i, "").trim();
+                        handleChange("leftSignerPangkatNip", `${off.pangkat} / NIP. ${cleanNip}`);
+                        if (off.jabatan) {
+                          handleChange("leftSignerTitle", `Mengetahui:\n${off.jabatan.toUpperCase()}`);
+                        }
+                      }
+                      e.target.value = "";
+                    }}
+                    className="w-full px-2 py-1 text-xs bg-white border border-emerald-300 rounded text-slate-800 focus:outline-none focus:ring-1 focus:ring-emerald-600"
+                  >
+                    <option value="">-- Pilih Pejabat Pimpinan ({officers.length} Pegawai) --</option>
+                    {officers.map((o) => (
+                      <option key={o.id} value={o.id}>
+                        {o.nama} ({o.jabatan || o.pangkat})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
               <div className="space-y-1">
                 <label className="block text-[11px] font-bold text-slate-700 uppercase">
                   Jabatan Penandatangan Pimpinan
@@ -447,6 +482,39 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
             </h3>
 
             <div className="space-y-2.5">
+              {officers.length > 0 && (
+                <div className="rounded bg-emerald-50/60 border border-emerald-200/80 p-2 space-y-1">
+                  <label className="text-[10px] font-bold text-emerald-900 uppercase flex items-center gap-1">
+                    <UserCheck className="w-3 h-3 text-emerald-700" />
+                    Pilih Cepat dari Database Pegawai
+                  </label>
+                  <select
+                    defaultValue=""
+                    onChange={(e) => {
+                      const selectedId = Number(e.target.value);
+                      const off = officers.find((o) => o.id === selectedId);
+                      if (off) {
+                        handleChange("rightSignerName", off.nama);
+                        const cleanNip = off.nip.replace(/^NIP\.?\s*/i, "").trim();
+                        handleChange("rightSignerPangkatNip", `${off.pangkat} / NIP. ${cleanNip}`);
+                        if (off.jabatan) {
+                          handleChange("rightSignerTitle", off.jabatan.toUpperCase());
+                        }
+                      }
+                      e.target.value = "";
+                    }}
+                    className="w-full px-2 py-1 text-xs bg-white border border-emerald-300 rounded text-slate-800 focus:outline-none focus:ring-1 focus:ring-emerald-600"
+                  >
+                    <option value="">-- Pilih Pejabat Pengesah ({officers.length} Pegawai) --</option>
+                    {officers.map((o) => (
+                      <option key={o.id} value={o.id}>
+                        {o.nama} ({o.jabatan || o.pangkat})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
               <div className="space-y-1">
                 <label className="block text-[11px] font-bold text-slate-700 uppercase">
                   Jabatan Penandatangan Kasi Intelijen
@@ -532,7 +600,7 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
                   File Cadangan Mandiri (.json)
                 </span>
                 <p className="text-[10px] text-slate-500 mt-1 leading-normal">
-                  Menyimpan seluruh data entri R.IN.1–R.IN.23 beserta kunci penandatangan.
+                  Menyimpan seluruh data entri R.IN.1–R.IN.22 beserta kunci penandatangan.
                 </p>
               </div>
 
