@@ -208,6 +208,8 @@ export const RegisterDocumentView: React.FC<RegisterDocumentViewProps> = ({
   const [isEditingRekap, setIsEditingRekap] = useState(false);
   const [tempRekapData, setTempRekapData] = useState<Record<string, string>>({});
   const [isSavingRekap, setIsSavingRekap] = useState(false);
+  const [rekapNotice, setRekapNotice] = useState<{ message: string; type: "success" | "error" } | null>(null);
+  const [isConfirmingResetRekap, setIsConfirmingResetRekap] = useState(false);
 
   /*
    * Map:
@@ -689,6 +691,7 @@ export const RegisterDocumentView: React.FC<RegisterDocumentViewProps> = ({
   const handleSaveRekap = async () => {
     try {
       setIsSavingRekap(true);
+      setRekapNotice(null);
       const dataToSave: Record<string, number | string> = {};
       if (register.rekapitulasiFields) {
         register.rekapitulasiFields.forEach((field) => {
@@ -702,7 +705,7 @@ export const RegisterDocumentView: React.FC<RegisterDocumentViewProps> = ({
         });
       }
 
-      const res = await authFetch("/api/register-rekapitulasi", {
+      let res = await authFetch("/api/register-rekapitulasi", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -712,37 +715,66 @@ export const RegisterDocumentView: React.FC<RegisterDocumentViewProps> = ({
         }),
       });
 
+      // Fallback ke rute register spesifik bila rute utama tidak ditemukan
+      if (!res.ok && res.status === 404) {
+        res = await authFetch(`/api/registers/${encodeURIComponent(register.code)}/rekapitulasi`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            periodKey: currentPeriodKey,
+            data: dataToSave,
+          }),
+        });
+      }
+
       if (!res.ok) {
-        throw new Error("Gagal menyimpan rekapitulasi.");
+        const errJson = await res.json().catch(() => null);
+        const errMsg = errJson?.error || `Gagal menyimpan rekapitulasi (Status: ${res.status})`;
+        setRekapNotice({ message: errMsg, type: "error" });
+        return;
       }
 
       const saved = await res.json();
       setManualRekapData(saved.data);
       setIsEditingRekap(false);
-    } catch (err) {
+      setRekapNotice({ message: "Rekapitulasi manual berhasil disimpan ke database.", type: "success" });
+      setTimeout(() => setRekapNotice(null), 3500);
+    } catch (err: unknown) {
       console.error("Gagal menyimpan rekapitulasi manual:", err);
-      alert("Gagal menyimpan rekapitulasi. Pastikan koneksi server tersedia.");
+      const msg = err instanceof Error ? err.message : "Terjadi kesalahan saat menyimpan rekapitulasi.";
+      setRekapNotice({ message: `Gagal menyimpan: ${msg}`, type: "error" });
     } finally {
       setIsSavingRekap(false);
     }
   };
 
   const handleResetRekapToAuto = async () => {
-    if (!window.confirm("Kembalikan rekapitulasi ke hitungan otomatis dari entri data tabel?")) {
-      return;
-    }
     try {
       setIsSavingRekap(true);
-      const res = await authFetch(
+      setRekapNotice(null);
+      let res = await authFetch(
         `/api/register-rekapitulasi?registerCode=${encodeURIComponent(register.code)}&periodKey=${encodeURIComponent(currentPeriodKey)}`,
         { method: "DELETE" }
       );
+      if (!res.ok && res.status === 404) {
+        res = await authFetch(
+          `/api/registers/${encodeURIComponent(register.code)}/rekapitulasi?periodKey=${encodeURIComponent(currentPeriodKey)}`,
+          { method: "DELETE" }
+        );
+      }
       if (res.ok) {
         setManualRekapData(null);
         setIsEditingRekap(false);
+        setIsConfirmingResetRekap(false);
+        setRekapNotice({ message: "Rekapitulasi dikembalikan ke hitungan otomatis sistem.", type: "success" });
+        setTimeout(() => setRekapNotice(null), 3500);
+      } else {
+        const errJson = await res.json().catch(() => null);
+        setRekapNotice({ message: errJson?.error || "Gagal mereset rekapitulasi.", type: "error" });
       }
-    } catch (err) {
+    } catch (err: unknown) {
       console.error("Gagal mereset rekapitulasi:", err);
+      setRekapNotice({ message: "Gagal mereset rekapitulasi.", type: "error" });
     } finally {
       setIsSavingRekap(false);
     }
@@ -1885,16 +1917,38 @@ export const RegisterDocumentView: React.FC<RegisterDocumentViewProps> = ({
                         Edit Rekapitulasi
                       </button>
                       {manualRekapData && (
-                        <button
-                          type="button"
-                          onClick={handleResetRekapToAuto}
-                          disabled={isSavingRekap}
-                          className="inline-flex items-center gap-1 rounded border border-amber-300 bg-amber-50 px-2 py-1 text-[11px] font-medium text-amber-800 shadow-xs hover:bg-amber-100 transition-colors cursor-pointer"
-                          title="Kembalikan ke hitungan otomatis sistem"
-                        >
-                          <RotateCcw className="h-3 w-3 text-amber-700" />
-                          Hitung Otomatis
-                        </button>
+                        !isConfirmingResetRekap ? (
+                          <button
+                            type="button"
+                            onClick={() => setIsConfirmingResetRekap(true)}
+                            disabled={isSavingRekap}
+                            className="inline-flex items-center gap-1 rounded border border-amber-300 bg-amber-50 px-2 py-1 text-[11px] font-medium text-amber-800 shadow-xs hover:bg-amber-100 transition-colors cursor-pointer"
+                            title="Kembalikan ke hitungan otomatis sistem"
+                          >
+                            <RotateCcw className="h-3 w-3 text-amber-700" />
+                            Hitung Otomatis
+                          </button>
+                        ) : (
+                          <div className="inline-flex items-center gap-1 bg-amber-100 border border-amber-400 rounded px-2 py-0.5 text-[11px]">
+                            <span className="font-semibold text-amber-900">Reset ke otomatis?</span>
+                            <button
+                              type="button"
+                              onClick={handleResetRekapToAuto}
+                              disabled={isSavingRekap}
+                              className="font-bold text-emerald-800 underline hover:text-emerald-950 px-1 cursor-pointer"
+                            >
+                              Ya
+                            </button>
+                            <span className="text-amber-400">/</span>
+                            <button
+                              type="button"
+                              onClick={() => setIsConfirmingResetRekap(false)}
+                              className="font-medium text-slate-600 hover:text-slate-900 px-1 cursor-pointer"
+                            >
+                              Batal
+                            </button>
+                          </div>
+                        )
                       )}
                     </>
                   ) : (
@@ -1927,6 +1981,25 @@ export const RegisterDocumentView: React.FC<RegisterDocumentViewProps> = ({
                 </div>
               )}
             </div>
+
+            {rekapNotice && (
+              <div
+                className={`mb-2.5 rounded px-2.5 py-1.5 text-[11px] font-medium flex items-center justify-between ${
+                  rekapNotice.type === "success"
+                    ? "bg-emerald-100 text-emerald-900 border border-emerald-300"
+                    : "bg-red-100 text-red-900 border border-red-300"
+                }`}
+              >
+                <span>{rekapNotice.message}</span>
+                <button
+                  type="button"
+                  onClick={() => setRekapNotice(null)}
+                  className="cursor-pointer text-slate-500 hover:text-slate-800 ml-2"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+            )}
 
             {isEditingRekap ? (
               <div className="space-y-2 pt-1 text-slate-700">
