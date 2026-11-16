@@ -39,7 +39,7 @@ import {
   RIN3_CATEGORIES,
 } from "../types.js";
 
-import { generateRegisterPdf } from "../lib/pdf-generator.js";
+import { generateRegisterPdf, generateMultiMonthRegisterPdf } from "../lib/pdf-generator.js";
 import { authFetch } from "../lib/api.js";
 
 import {
@@ -64,6 +64,7 @@ import { ImportCsvModal } from "./ImportCsvModal.js";
 import { PdfPreviewModal } from "./PdfPreviewModal.js";
 import { StorageCodesModal } from "./StorageCodesModal.js";
 import { LockRegisterModal } from "./LockRegisterModal.js";
+import { BatchMonthPdfModal } from "./BatchMonthPdfModal.js";
 
 interface RegisterDocumentViewProps {
   register: RegisterDefinition;
@@ -162,6 +163,10 @@ export const RegisterDocumentView: React.FC<RegisterDocumentViewProps> = ({
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [isImportCsvOpen, setIsImportCsvOpen] = useState(false);
   const [isStorageCodesOpen, setIsStorageCodesOpen] = useState(false);
+  const [isBatchPdfModalOpen, setIsBatchPdfModalOpen] = useState(false);
+  const [isGeneratingBatchPdf, setIsGeneratingBatchPdf] = useState(false);
+  const [batchPdfError, setBatchPdfError] = useState<string | null>(null);
+  const [customPreviewFilename, setCustomPreviewFilename] = useState<string | null>(null);
 
   const [generatedPdf, setGeneratedPdf] = useState<jsPDF | null>(null);
 
@@ -821,8 +826,124 @@ export const RegisterDocumentView: React.FC<RegisterDocumentViewProps> = ({
 
   const handlePreviewPdf = () => {
     const document = handleGeneratePdf();
+    setCustomPreviewFilename(null);
     setGeneratedPdf(document);
     setIsPreviewOpen(true);
+  };
+
+  // Hitung jumlah baris per bulan untuk Tahun terpilih (untuk modal unduh PDF multi-bulan)
+  const monthlyCountsForYear = React.useMemo(() => {
+    const counts: Record<number, number> = {};
+    for (let m = 1; m <= 12; m++) {
+      const mEntries = filterEntriesByPeriod(entries, selectedYear, m);
+      const catEntries =
+        register.code === "R.IN.3"
+          ? filterRin3EntriesByCategory(mEntries, rin3CategoryFilter)
+          : mEntries;
+      counts[m] = catEntries.length;
+    }
+    return counts;
+  }, [entries, selectedYear, register.code, rin3CategoryFilter]);
+
+  const handleGenerateBatchMonthPdf = async (
+    selectedMonths: number[],
+    mode: "download" | "preview",
+    locksByPeriod: Map<string, RegisterLock>
+  ) => {
+    const sortedMonths = Array.from(new Set(selectedMonths))
+      .filter((m) => m >= 1 && m <= 12)
+      .sort((a, b) => a - b);
+
+    if (sortedMonths.length === 0) return;
+
+    try {
+      setIsGeneratingBatchPdf(true);
+      setBatchPdfError(null);
+
+      // Ambil manual rekapitulasi per bulan bila register memiliki blok rekapitulasi
+      const rekapByPeriod = new Map<string, Record<string, number | string>>();
+      if (register.hasRekapitulasi) {
+        await Promise.all(
+          sortedMonths.map(async (m) => {
+            const pKey = `${selectedYear}-${String(m).padStart(2, "0")}`;
+            try {
+              let res = await authFetch(
+                `/api/register-rekapitulasi?registerCode=${encodeURIComponent(register.code)}&periodKey=${encodeURIComponent(pKey)}`
+              );
+              if (!res.ok && res.status === 404) {
+                res = await authFetch(
+                  `/api/registers/${encodeURIComponent(register.code)}/rekapitulasi?periodKey=${encodeURIComponent(pKey)}`
+                );
+              }
+              if (res.ok) {
+                const record = await res.json();
+                if (record?.data) {
+                  rekapByPeriod.set(pKey, record.data);
+                }
+              }
+            } catch {
+              // Gunakan hitungan otomatis bila gagal mengambil rekap manual
+            }
+          })
+        );
+      }
+
+      const activeCategoryFilter =
+        register.code === "R.IN.3" && rin3CategoryFilter !== "all"
+          ? rin3CategoryFilter
+          : undefined;
+
+      const pdfDoc = generateMultiMonthRegisterPdf({
+        register,
+        entries,
+        settings,
+        officers,
+        tahunTakwim: selectedYear,
+        selectedMonths: sortedMonths,
+        orientationOverride: currentOrientation,
+        locksByPeriod,
+        categoryFilter: activeCategoryFilter,
+        rekapByPeriod,
+        filterEntriesFn: (allEntries, yr, m) => {
+          const periodList = filterEntriesByPeriod(allEntries, yr, m);
+          const catList =
+            register.code === "R.IN.3"
+              ? filterRin3EntriesByCategory(periodList, rin3CategoryFilter)
+              : periodList;
+          return [...catList].sort(compareLatestFirst);
+        },
+      });
+
+      const monthSlug =
+        sortedMonths.length === 12
+          ? "Januari-Desember"
+          : sortedMonths.map((m) => MONTH_SHORT_ID[m - 1]).join("_");
+
+      const catSlug = activeCategoryFilter
+        ? `_${activeCategoryFilter.split(",")[0].replace(/\s+/g, "_").slice(0, 15)}`
+        : "";
+
+      const filename = `${register.code}_${monthSlug}_${selectedYear}${catSlug}_${register.title
+        .replace(/[\/\s,]+/g, "_")
+        .slice(0, 30)}.pdf`;
+
+      if (mode === "preview") {
+        setCustomPreviewFilename(filename);
+        setGeneratedPdf(pdfDoc);
+        setIsBatchPdfModalOpen(false);
+        setIsPreviewOpen(true);
+      } else {
+        pdfDoc.save(filename);
+        setIsBatchPdfModalOpen(false);
+      }
+    } catch (err: unknown) {
+      console.error("Gagal menyusun PDF gabungan multi-bulan:", err);
+      setBatchPdfError(
+        err instanceof Error ? err.message : "Terjadi kesalahan saat menyusun PDF gabungan."
+      );
+    } finally {
+      setIsGeneratingBatchPdf(false);
+    }
   };
 
   const handleStartEditClosingDate = () => {
@@ -1222,6 +1343,20 @@ export const RegisterDocumentView: React.FC<RegisterDocumentViewProps> = ({
           >
             <Download className="h-3.5 w-3.5" />
             <span>Unduh PDF Periode</span>
+          </button>
+
+          <button
+            id="btn-download-pdf-multi-month"
+            type="button"
+            onClick={() => {
+              setBatchPdfError(null);
+              setIsBatchPdfModalOpen(true);
+            }}
+            title="Pilih beberapa bulan (misal Jan–Mar atau Jan–Des) untuk diunduh menjadi 1 file PDF berurutan"
+            className="inline-flex cursor-pointer items-center gap-1.5 rounded border border-emerald-700 bg-emerald-700 px-3 py-1.5 text-xs font-bold text-white shadow-sm transition hover:bg-emerald-800"
+          >
+            <Layers className="h-3.5 w-3.5" />
+            <span>Unduh PDF Pilihan Bulan</span>
           </button>
 
           {/* Input Pencarian Cepat */}
@@ -2384,12 +2519,30 @@ export const RegisterDocumentView: React.FC<RegisterDocumentViewProps> = ({
 
       <PdfPreviewModal
         isOpen={isPreviewOpen}
-        onClose={() => setIsPreviewOpen(false)}
+        onClose={() => {
+          setIsPreviewOpen(false);
+          setCustomPreviewFilename(null);
+        }}
         pdfDoc={generatedPdf}
-        filename={`${register.code}_${typeof selectedMonth === "number"
+        filename={
+          customPreviewFilename ||
+          `${register.code}_${typeof selectedMonth === "number"
             ? MONTH_NAMES_ID[selectedMonth - 1]
             : "Semua"
-          }_${selectedYear}.pdf`}
+          }_${selectedYear}.pdf`
+        }
+      />
+
+      <BatchMonthPdfModal
+        isOpen={isBatchPdfModalOpen}
+        onClose={() => setIsBatchPdfModalOpen(false)}
+        register={register}
+        selectedYear={selectedYear}
+        initialMonth={selectedMonth}
+        monthCounts={monthlyCountsForYear}
+        isGenerating={isGeneratingBatchPdf}
+        errorMessage={batchPdfError}
+        onGenerate={handleGenerateBatchMonthPdf}
       />
 
       <ImportCsvModal

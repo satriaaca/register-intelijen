@@ -22,6 +22,15 @@ interface LockRegisterModalProps {
   onLockSaved?: (updatedLock: RegisterLock | null) => void;
 }
 
+function formatLockPangkatNip(value: string): string {
+  return value
+    .replace(/\s*\/\s*(?=NIP\b)/gi, " ")
+    .replace(/\//g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toUpperCase();
+}
+
 export const LockRegisterModal: React.FC<LockRegisterModalProps> = ({
   isOpen,
   onClose,
@@ -73,20 +82,24 @@ export const LockRegisterModal: React.FC<LockRegisterModalProps> = ({
       if (currentLock && currentLock.isLocked) {
         setLeftSignerTitle(currentLock.leftSignerTitle || safeSettings.leftSignerTitle || "");
         setLeftSignerName(currentLock.leftSignerName || safeSettings.leftSignerName || "");
-        setLeftSignerPangkatNip(currentLock.leftSignerPangkatNip || safeSettings.leftSignerPangkatNip || "");
+        setLeftSignerPangkatNip(
+          formatLockPangkatNip(currentLock.leftSignerPangkatNip || safeSettings.leftSignerPangkatNip || "")
+        );
         setRightSignerTitle(currentLock.rightSignerTitle || safeSettings.rightSignerTitle || "");
         setRightSignerName(currentLock.rightSignerName || safeSettings.rightSignerName || "");
-        setRightSignerPangkatNip(currentLock.rightSignerPangkatNip || safeSettings.rightSignerPangkatNip || "");
+        setRightSignerPangkatNip(
+          formatLockPangkatNip(currentLock.rightSignerPangkatNip || safeSettings.rightSignerPangkatNip || "")
+        );
         setSignatureAlignment(currentLock.signatureAlignment || safeSettings.signatureAlignment || "split");
         setTempatDokumen(currentLock.tempatDokumen || safeSettings.tempatDokumen || "Tabanan");
         setClosingDate(currentLock.closingDate || safeClosingDate);
       } else {
         setLeftSignerTitle(safeSettings.leftSignerTitle || "");
         setLeftSignerName(safeSettings.leftSignerName || "");
-        setLeftSignerPangkatNip(safeSettings.leftSignerPangkatNip || "");
+        setLeftSignerPangkatNip(formatLockPangkatNip(safeSettings.leftSignerPangkatNip || ""));
         setRightSignerTitle(safeSettings.rightSignerTitle || "");
         setRightSignerName(safeSettings.rightSignerName || "");
-        setRightSignerPangkatNip(safeSettings.rightSignerPangkatNip || "");
+        setRightSignerPangkatNip(formatLockPangkatNip(safeSettings.rightSignerPangkatNip || ""));
         setSignatureAlignment(safeSettings.signatureAlignment || "split");
         setTempatDokumen(safeSettings.tempatDokumen || "Tabanan");
         setClosingDate(safeClosingDate);
@@ -101,6 +114,9 @@ export const LockRegisterModal: React.FC<LockRegisterModalProps> = ({
     setIsSubmitting(true);
     setError(null);
 
+    const formattedLeftPangkatNip = formatLockPangkatNip(leftSignerPangkatNip);
+    const formattedRightPangkatNip = formatLockPangkatNip(rightSignerPangkatNip);
+
     try {
       const response = await authFetch("/api/register-locks", {
         method: "POST",
@@ -111,10 +127,10 @@ export const LockRegisterModal: React.FC<LockRegisterModalProps> = ({
           isLocked: true,
           leftSignerTitle,
           leftSignerName,
-          leftSignerPangkatNip,
+          leftSignerPangkatNip: formattedLeftPangkatNip,
           rightSignerTitle,
           rightSignerName,
-          rightSignerPangkatNip,
+          rightSignerPangkatNip: formattedRightPangkatNip,
           signatureAlignment,
           tempatDokumen,
           closingDate,
@@ -123,6 +139,9 @@ export const LockRegisterModal: React.FC<LockRegisterModalProps> = ({
       });
 
       const savedLockData = await response.json();
+      if (!response.ok) {
+        throw new Error(savedLockData?.error || "Gagal mengunci register.");
+      }
       onLockSaved?.(savedLockData);
       onLockUpdated?.();
       onClose();
@@ -255,7 +274,7 @@ export const LockRegisterModal: React.FC<LockRegisterModalProps> = ({
                       if (off) {
                         setLeftSignerName(off.nama);
                         const cleanNip = off.nip.replace(/^NIP\.?\s*/i, "").trim();
-                        setLeftSignerPangkatNip(`${off.pangkat} / NIP. ${cleanNip}`);
+                        setLeftSignerPangkatNip(formatLockPangkatNip(`${off.pangkat} NIP. ${cleanNip}`));
                         if (off.jabatan) {
                           setLeftSignerTitle(`Mengetahui:\n${off.jabatan.toUpperCase()}`);
                         }
@@ -310,7 +329,7 @@ export const LockRegisterModal: React.FC<LockRegisterModalProps> = ({
                   <input
                     type="text"
                     value={leftSignerPangkatNip}
-                    onChange={(e) => setLeftSignerPangkatNip(e.target.value)}
+                    onChange={(e) => setLeftSignerPangkatNip(e.target.value.replace(/\//g, "").toUpperCase())}
                     disabled={Boolean(isCurrentlyLocked)}
                     required
                     className={`w-full px-2.5 py-1.5 text-xs font-mono rounded border transition ${
@@ -347,7 +366,7 @@ export const LockRegisterModal: React.FC<LockRegisterModalProps> = ({
                       if (off) {
                         setRightSignerName(off.nama);
                         const cleanNip = off.nip.replace(/^NIP\.?\s*/i, "").trim();
-                        setRightSignerPangkatNip(`${off.pangkat} / NIP. ${cleanNip}`);
+                        setRightSignerPangkatNip(formatLockPangkatNip(`${off.pangkat} NIP. ${cleanNip}`));
                         if (off.jabatan) {
                           setRightSignerTitle(off.jabatan.toUpperCase());
                         }
@@ -402,7 +421,7 @@ export const LockRegisterModal: React.FC<LockRegisterModalProps> = ({
                   <input
                     type="text"
                     value={rightSignerPangkatNip}
-                    onChange={(e) => setRightSignerPangkatNip(e.target.value)}
+                    onChange={(e) => setRightSignerPangkatNip(e.target.value.replace(/\//g, "").toUpperCase())}
                     disabled={Boolean(isCurrentlyLocked)}
                     required
                     className={`w-full px-2.5 py-1.5 text-xs font-mono rounded border transition ${

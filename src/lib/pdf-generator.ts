@@ -39,7 +39,99 @@ export interface GeneratePdfOptions {
   rekapitulasiData?: Record<string, number | string>;
 }
 
+export interface MultiMonthPdfOptions {
+  register: RegisterDefinition;
+  entries: RegisterEntryRow[];
+  settings: AppSettings;
+  officers: Officer[];
+  tahunTakwim: number;
+  selectedMonths: number[];
+  orientationOverride?: "landscape" | "portrait";
+  locksByPeriod?: Map<string, RegisterLock>;
+  categoryFilter?: string | null;
+  rekapByPeriod?: Map<string, Record<string, number | string>>;
+  filterEntriesFn: (entries: RegisterEntryRow[], year: number, month: number) => RegisterEntryRow[];
+}
+
 export function generateRegisterPdf(options: GeneratePdfOptions): jsPDF {
+  const isLandscape = (options.orientationOverride || options.register.orientation) === "landscape";
+
+  const doc = new jsPDF({
+    orientation: isLandscape ? "landscape" : "portrait",
+    unit: "mm",
+    format: F4_FORMAT,
+    compress: true,
+    putOnlyUsedFonts: true,
+  });
+
+  renderRegisterMonthIntoDoc(doc, options, true);
+  return doc;
+}
+
+export function generateMultiMonthRegisterPdf(options: MultiMonthPdfOptions): jsPDF {
+  const {
+    register,
+    entries,
+    settings,
+    officers,
+    tahunTakwim,
+    selectedMonths,
+    orientationOverride,
+    locksByPeriod,
+    categoryFilter,
+    rekapByPeriod,
+    filterEntriesFn,
+  } = options;
+
+  const isLandscape = (orientationOverride || register.orientation) === "landscape";
+
+  const doc = new jsPDF({
+    orientation: isLandscape ? "landscape" : "portrait",
+    unit: "mm",
+    format: F4_FORMAT,
+    compress: true,
+    putOnlyUsedFonts: true,
+  });
+
+  // Selalu urutkan bulan secara kronologis dari Januari (1) dst.
+  const sortedMonths = Array.from(new Set(selectedMonths))
+    .filter((m) => m >= 1 && m <= 12)
+    .sort((a, b) => a - b);
+
+  sortedMonths.forEach((month, idx) => {
+    const periodKey = `${tahunTakwim}-${String(month).padStart(2, "0")}`;
+    const monthEntries = filterEntriesFn(entries, tahunTakwim, month);
+    const lockSnapshot = locksByPeriod?.get(periodKey) ?? null;
+    const rekapitulasiData = rekapByPeriod?.get(periodKey);
+    const customClosingDate = getClosingDateForPeriod(settings, tahunTakwim, month);
+
+    renderRegisterMonthIntoDoc(
+      doc,
+      {
+        register,
+        entries: monthEntries,
+        settings,
+        officers,
+        tahunTakwim,
+        selectedMonth: month,
+        customClosingDate,
+        orientationOverride,
+        lockSnapshot,
+        categoryFilter,
+        rekapitulasiData,
+      },
+      idx === 0
+    );
+  });
+
+  return doc;
+}
+
+function renderRegisterMonthIntoDoc(
+  doc: jsPDF,
+  options: GeneratePdfOptions,
+  isFirstSection: boolean
+): void {
   const {
     register,
     entries,
@@ -54,6 +146,10 @@ export function generateRegisterPdf(options: GeneratePdfOptions): jsPDF {
     rekapitulasiData,
   } = options;
   const isLandscape = (orientationOverride || register.orientation) === "landscape";
+
+  if (!isFirstSection) {
+    doc.addPage();
+  }
 
   // Data Penandatangan: Gunakan Snapshot jika Terkunci, atau Pengaturan Global jika belum terkunci
   const effectiveLeftSignerTitle =
@@ -112,14 +208,7 @@ export function generateRegisterPdf(options: GeneratePdfOptions): jsPDF {
       ? `${MONTH_NAMES_ID[selectedMonth - 1]} ${tahunTakwim}`
       : `Tahun ${tahunTakwim}`;
 
-  // Inisialisasi dokumen jsPDF (F4) dengan kompresi aktif
-  const doc = new jsPDF({
-    orientation: isLandscape ? "landscape" : "portrait",
-    unit: "mm",
-    format: F4_FORMAT,
-    compress: true,
-    putOnlyUsedFonts: true,
-  });
+  doc.setTextColor(0, 0, 0);
 
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
@@ -406,6 +495,8 @@ export function generateRegisterPdf(options: GeneratePdfOptions): jsPDF {
     columnStyles[i] = { cellWidth: w };
   });
 
+  const sectionFirstPage = (doc as any).internal.getNumberOfPages();
+
   // Render tabel menggunakan autoTable
   (autoTable as any)(doc, {
     head: headRows,
@@ -435,9 +526,10 @@ export function generateRegisterPdf(options: GeneratePdfOptions): jsPDF {
       lineWidth: 0.25,
       lineColor: [40, 40, 40],
     },
-    didDrawPage: (data: any) => {
-      if (data.pageNumber > 1) {
-        drawPageHeader(doc, data.pageNumber);
+    didDrawPage: () => {
+      const currentPage = (doc as any).internal.getNumberOfPages();
+      if (currentPage > sectionFirstPage) {
+        drawPageHeader(doc, currentPage);
       }
       drawPageBorder();
     },
@@ -446,9 +538,9 @@ export function generateRegisterPdf(options: GeneratePdfOptions): jsPDF {
   const lastTable = (doc as any).lastAutoTable;
   const tableFinalY = lastTable ? Number(lastTable.finalY) : startY + 45;
 
-  // Render Watermark "N I H I L" 60pt tepat di tengah 5 baris pada halaman 1
+  // Render Watermark "N I H I L" 60pt tepat di tengah 5 baris pada halaman awal bulan
   if (isDataEmpty) {
-    doc.setPage(1);
+    doc.setPage(sectionFirstPage);
     const headerHeightEstimate = hasSubCols ? 18 : 12;
     const tableBodyStartY = startY + headerHeightEstimate;
     const centerY = (tableBodyStartY + tableFinalY) / 2;
@@ -687,10 +779,5 @@ export function generateRegisterPdf(options: GeneratePdfOptions): jsPDF {
   // Catatan Kaki
   doc.setFont("helvetica", "italic");
   doc.setFontSize(7.5);
-  doc.setTextColor(100, 100, 100);
-  const footnoteY = pageHeight - marginBottom;
-
   doc.setTextColor(0, 0, 0);
-
-  return doc;
 }
