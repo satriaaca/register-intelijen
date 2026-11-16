@@ -682,3 +682,34 @@ export const REGISTER_DEFINITIONS: RegisterDefinition[] = [
     ],
   },
 ];
+
+export const REGISTER_SHORT_LABELS: Record<string, string> = {
+  "R.IN.1": "Surat Masuk Biasa / Rahasia",
+  "R.IN.2": "Surat Keluar Biasa / Rahasia",
+  "R.IN.3": "Kerja Intelijen (5 Bidang)",
+  "R.IN.4": "Ekspedisi Surat Biasa / Rahasia",
+  "R.IN.5": "Produk Intelijen",
+  "R.IN.6": "Arsip Intelijen",
+  "R.IN.7": "Kegiatan Bid. Ipoleksoshankam",
+  "R.IN.8": "Kegiatan Bid. Sosbudmas",
+  "R.IN.9": "Kegiatan Bid. Ekonomi & Keuangan",
+  "R.IN.10": "Kegiatan Bid. PPS",
+  "R.IN.11": "Kegiatan Bid. TI & Prodin",
+  "R.IN.12": "Operasi Bid. Ipoleksoshankam",
+  "R.IN.13": "Operasi Bid. Sosbudmas",
+  "R.IN.14": "Operasi Bid. Ekonomi & Keuangan",
+  "R.IN.15": "Operasi Bid. PPS",
+  "R.IN.16": "Operasi Bid. TI & Prodin",
+  "R.IN.17": "Berita Masuk (Kamar Sandi)",
+  "R.IN.18": "Berita Keluar (Kamar Sandi)",
+  "R.IN.19": "Telaahan Intelijen",
+  "R.IN.20": "Ekspedisi Berita Sandi",
+  "R.IN.21": "Tamu PPH & Pengaduan (PPM)",
+  "R.IN.22": "Penerangan & Penyuluhan Hukum",
+};
+
+export function getRegisterShortLabel(reg: Pick<RegisterDefinition, "code" | "title">): string {
+  if (REGISTER_SHORT_LABELS[reg.code]) return REGISTER_SHORT_LABELS[reg.code];
+  return reg.title.replace(/^REGISTER\s+/i, "");
+}
+

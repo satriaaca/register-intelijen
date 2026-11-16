@@ -16,6 +16,7 @@ import {
   useTransitionStyles,
 } from "@floating-ui/react";
 import { RegisterDefinition } from "../types.js";
+import { getRegisterShortLabel } from "../lib/constants.js";
 import { BookOpen, Check, ChevronDown, ChevronUp, Search, X } from "lucide-react";
 
 type RegisterItem = RegisterDefinition & {
@@ -29,31 +30,6 @@ interface RegisterSelectorProps {
   onSelect: (code: string) => void;
 }
 
-const SHORT_LABELS: Record<string, string> = {
-  "R.IN.1": "Surat Masuk Biasa / Rahasia",
-  "R.IN.2": "Surat Keluar Biasa / Rahasia",
-  "R.IN.3": "Kerja Intelijen (5 Bidang)",
-  "R.IN.4": "Ekspedisi Surat Biasa / Rahasia",
-  "R.IN.5": "Produk Intelijen",
-  "R.IN.6": "Arsip Intelijen",
-  "R.IN.7": "Kegiatan Bid. Ipoleksoshankam",
-  "R.IN.8": "Kegiatan Bid. Sosbudmas",
-  "R.IN.9": "Kegiatan Bid. Ekonomi & Keuangan",
-  "R.IN.10": "Kegiatan Bid. PPS",
-  "R.IN.11": "Kegiatan Bid. TI & Prodin",
-  "R.IN.12": "Operasi Bid. Ipoleksoshankam",
-  "R.IN.13": "Operasi Bid. Sosbudmas",
-  "R.IN.14": "Operasi Bid. Ekonomi & Keuangan",
-  "R.IN.15": "Operasi Bid. PPS",
-  "R.IN.16": "Operasi Bid. TI & Prodin",
-  "R.IN.17": "Berita Masuk (Kamar Sandi)",
-  "R.IN.18": "Berita Keluar (Kamar Sandi)",
-  "R.IN.19": "Telaahan Intelijen",
-  "R.IN.20": "Ekspedisi Berita Sandi",
-  "R.IN.21": "Tamu PPH & Pengaduan (PPM)",
-  "R.IN.22": "Penerangan & Penyuluhan Hukum",
-};
-
 const CATEGORY_TEXT_ACCENT: Record<string, string> = {
   "Surat & Berita": "text-emerald-700",
   "Kerja & Produk": "text-teal-700",
@@ -61,11 +37,6 @@ const CATEGORY_TEXT_ACCENT: Record<string, string> = {
   "Operasi Intelijen": "text-amber-700",
   "Layanan & Penyuluhan": "text-indigo-700",
 };
-
-function getShortLabel(reg: RegisterItem): string {
-  if (SHORT_LABELS[reg.code]) return SHORT_LABELS[reg.code];
-  return reg.title.replace(/^REGISTER\s+/i, "");
-}
 
 interface RegisterCardProps {
   reg: RegisterItem;
@@ -80,7 +51,7 @@ const RegisterCard: React.FC<RegisterCardProps> = ({
 }) => {
   const [open, setOpen] = useState(false);
   const arrowRef = useRef<SVGSVGElement>(null);
-  const shortLabel = getShortLabel(reg);
+  const shortLabel = getRegisterShortLabel(reg);
 
   const { refs, floatingStyles, context } = useFloating({
     open,
@@ -141,8 +112,9 @@ const RegisterCard: React.FC<RegisterCardProps> = ({
           </span>
 
           {isSelected ? (
-            <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-amber-400/20 text-amber-300">
-              <Check className="h-2.5 w-2.5" strokeWidth={3} />
+            <span className="inline-flex shrink-0 items-center gap-1 text-[10px] font-semibold text-amber-300">
+              <Check className="h-3 w-3" strokeWidth={3} />
+              <span>Aktif</span>
             </span>
           ) : (
             <span
@@ -231,7 +203,7 @@ export const RegisterSelector: React.FC<RegisterSelectorProps> = ({
         q.length > 0 || activeCategory === "Semua" || reg.category === activeCategory;
       if (!matchesCategory) return false;
       if (!q) return true;
-      const shortLabel = getShortLabel(reg).toLowerCase();
+      const shortLabel = getRegisterShortLabel(reg).toLowerCase();
       return (
         reg.code.toLowerCase().includes(q) ||
         reg.title.toLowerCase().includes(q) ||
@@ -285,7 +257,7 @@ export const RegisterSelector: React.FC<RegisterSelectorProps> = ({
               <>
                 <span aria-hidden="true" className="mx-1.5 text-slate-300">·</span>
                 <span className="font-medium text-emerald-800">
-                  Aktif: {activeReg.code} — {getShortLabel(activeReg)}
+                  Aktif: {activeReg.code} — {getRegisterShortLabel(activeReg)}
                 </span>
               </>
             )}

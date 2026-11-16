@@ -555,6 +555,8 @@ export default function App() {
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         selectedRegisterCode={selectedCode}
+        registers={registers}
+        onSelectRegister={setSelectedCode}
         totalOfficers={officers.length}
         totalEntries={totalEntriesCount}
         onSeedSample={handleSeedSample}
