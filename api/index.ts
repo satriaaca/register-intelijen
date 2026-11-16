@@ -186,9 +186,11 @@ app.delete("/api/officers/:id", async (req, res) => {
 // ---------------------------------------------------------------------------
 // Register metadata
 // ---------------------------------------------------------------------------
-app.get("/api/registers", async (_req, res) => {
+app.get("/api/registers", async (req, res) => {
     try {
-        const summary = await getRegistersSummary();
+        const rawYear = req.query.year ? Number.parseInt(String(req.query.year), 10) : undefined;
+        const year = rawYear && !Number.isNaN(rawYear) ? rawYear : undefined;
+        const summary = await getRegistersSummary(year);
 
         const registers = REGISTER_DEFINITIONS.map((definition) => ({
             ...definition,

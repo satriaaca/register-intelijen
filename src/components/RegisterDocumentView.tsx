@@ -71,6 +71,8 @@ interface RegisterDocumentViewProps {
   entries: RegisterEntryRow[];
   officers: Officer[];
   settings: AppSettings;
+  selectedYear?: number;
+  onYearChange?: (year: number) => void;
   onSaveEntry: (data: {
     id?: number;
     nomorUrut: number;
@@ -150,6 +152,8 @@ export const RegisterDocumentView: React.FC<RegisterDocumentViewProps> = ({
   entries,
   officers,
   settings,
+  selectedYear: controlledYear,
+  onYearChange,
   onSaveEntry,
   onDeleteEntry,
   onBatchDeleteEntries,
@@ -188,7 +192,12 @@ export const RegisterDocumentView: React.FC<RegisterDocumentViewProps> = ({
   const currentCalendarYear = now.getFullYear();
   const currentCalendarMonth = now.getMonth() + 1;
 
-  const [selectedYear, setSelectedYear] = useState<number>(() => currentCalendarYear);
+  const [internalYear, setInternalYear] = useState<number>(() => currentCalendarYear);
+  const selectedYear = controlledYear ?? internalYear;
+  const setSelectedYear = (year: number) => {
+    setInternalYear(year);
+    onYearChange?.(year);
+  };
   const [selectedMonth, setSelectedMonth] = useState<number | "all">(() => currentCalendarMonth);
 
   // Filter Kategori Khusus R.IN.3
@@ -353,6 +362,12 @@ export const RegisterDocumentView: React.FC<RegisterDocumentViewProps> = ({
   const activeClosingDateWithDay = formatDateIndonesian(
     activeClosingDate,
     true,
+  );
+
+  // Total entri khusus untuk Tahun terpilih
+  const yearEntries = React.useMemo(
+    () => filterEntriesByPeriod(entries, selectedYear, "all"),
+    [entries, selectedYear],
   );
 
   // Filter berdasarkan periode Tahun & Bulan
@@ -1120,7 +1135,7 @@ export const RegisterDocumentView: React.FC<RegisterDocumentViewProps> = ({
                 : "border border-slate-200 bg-slate-100 text-slate-700 hover:bg-slate-200"
               }`}
           >
-            Semua Bulan ({entries.length})
+            Semua Bulan ({yearEntries.length})
           </button>
 
           {MONTH_NAMES_ID.map((name, index) => {
@@ -1206,7 +1221,7 @@ export const RegisterDocumentView: React.FC<RegisterDocumentViewProps> = ({
 
             <span className="font-mono text-[11px] text-slate-500">
               • {filteredEntries.length} baris data pada periode ini (
-              {entries.length} total tahunan)
+              {yearEntries.length} total tahun {selectedYear})
             </span>
           </div>
 

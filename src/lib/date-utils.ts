@@ -96,16 +96,32 @@ export function getClosingDateForPeriod(
   return getDefaultClosingDate(year, month1Indexed);
 }
 
+function extractNormalizedIsoDate(raw: string): string | null {
+  const trimmed = raw.trim();
+  const isoMatch = trimmed.match(/\b(\d{4})-(\d{1,2})-(\d{1,2})\b/);
+  if (isoMatch) {
+    const [, y, m, d] = isoMatch;
+    return `${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`;
+  }
+  const idnMatch = trimmed.match(/\b(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})\b/);
+  if (idnMatch) {
+    const [, d, m, y] = idnMatch;
+    const monthNum = parseInt(m, 10);
+    const dayNum = parseInt(d, 10);
+    if (monthNum >= 1 && monthNum <= 12 && dayNum >= 1 && dayNum <= 31) {
+      return `${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`;
+    }
+  }
+  return null;
+}
+
 /**
  * Extracts a date from a RegisterEntryRow (checks tgl or common date fields in data)
  */
 export function extractDateFromEntry(entry: RegisterEntryRow): string | null {
   if (entry.tgl && typeof entry.tgl === "string" && entry.tgl.trim()) {
-    const trimmed = entry.tgl.trim();
-    // Return standard YYYY-MM-DD
-    if (/^\d{4}-\d{2}-\d{2}/.test(trimmed)) {
-      return trimmed.slice(0, 10);
-    }
+    const normalized = extractNormalizedIsoDate(entry.tgl);
+    if (normalized) return normalized;
   }
 
   const data = entry.data || {};
@@ -142,17 +158,16 @@ export function extractDateFromEntry(entry: RegisterEntryRow): string | null {
 
   for (const key of dateKeys) {
     if (data[key] && typeof data[key] === "string" && data[key].trim()) {
-      const val = data[key].trim();
-      const match = val.match(/\d{4}-\d{2}-\d{2}/);
-      if (match) return match[0];
+      const normalized = extractNormalizedIsoDate(data[key]);
+      if (normalized) return normalized;
     }
   }
 
-  // Scan any other property in data for a YYYY-MM-DD date string
+  // Scan any other property in data for a date string
   for (const val of Object.values(data)) {
     if (typeof val === "string") {
-      const match = val.match(/\d{4}-\d{2}-\d{2}/);
-      if (match) return match[0];
+      const normalized = extractNormalizedIsoDate(val);
+      if (normalized) return normalized;
     }
   }
 

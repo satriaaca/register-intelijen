@@ -46,6 +46,7 @@ export default function App() {
   >("registers");
 
   const [selectedCode, setSelectedCode] = useState("R.IN.1");
+  const [selectedYear, setSelectedYear] = useState<number>(() => new Date().getFullYear());
 
   const [registers, setRegisters] = useState<
     (RegisterDefinition & { entryCount?: number })[]
@@ -86,13 +87,30 @@ export default function App() {
     }, 3500);
   };
 
-  const fetchData = async (targetCode = selectedCode) => {
+  const fetchRegisterCounts = async (year = selectedYear) => {
+    try {
+      const registerResponse = await authFetch(`/api/registers?year=${encodeURIComponent(year)}`);
+      if (registerResponse.ok) {
+        const registerData = await registerResponse.json();
+        if (registerData.registers) {
+          setRegisters(registerData.registers);
+        }
+        if (registerData.summary?.countsByRegister) {
+          setCachedRegisterCounts(registerData.summary.countsByRegister);
+        }
+      }
+    } catch (error) {
+      console.error("Error refreshing register counts:", error);
+    }
+  };
+
+  const fetchData = async (targetCode = selectedCode, targetYear = selectedYear) => {
     try {
       setIsSyncing(true);
 
       const [regResponse, officerResponse, settingsResponse, entriesResponse] =
         await Promise.all([
-          authFetch("/api/registers"),
+          authFetch(`/api/registers?year=${encodeURIComponent(targetYear)}`),
           authFetch("/api/officers"),
           authFetch("/api/settings"),
           authFetch(`/api/registers/${targetCode}/entries`),
@@ -176,7 +194,7 @@ export default function App() {
 
   useEffect(() => {
     if (currentUser) {
-      void fetchData(selectedCode);
+      void fetchData(selectedCode, selectedYear);
     }
   }, [currentUser]);
 
@@ -190,6 +208,17 @@ export default function App() {
       void fetchEntries(selectedCode);
     }
   }, [selectedCode]);
+
+  const hasYearMountedRef = useRef(false);
+  useEffect(() => {
+    if (!hasYearMountedRef.current) {
+      hasYearMountedRef.current = true;
+      return;
+    }
+    if (currentUser) {
+      void fetchRegisterCounts(selectedYear);
+    }
+  }, [selectedYear]);
 
   const handleLogout = async () => {
     try {
@@ -311,13 +340,7 @@ export default function App() {
 
     entriesCacheRef.current.delete(selectedCode.toLowerCase());
     await fetchEntries(selectedCode, true);
-
-    const registerResponse = await authFetch("/api/registers");
-    const registerData = await registerResponse.json();
-
-    if (registerData.registers) {
-      setRegisters(registerData.registers);
-    }
+    await fetchRegisterCounts(selectedYear);
   };
 
   const handleDeleteEntry = async (id: number) => {
@@ -337,12 +360,7 @@ export default function App() {
 
     showNotification("Baris data register berhasil dihapus.");
 
-    const registerResponse = await authFetch("/api/registers");
-    const registerData = await registerResponse.json();
-
-    if (registerData.registers) {
-      setRegisters(registerData.registers);
-    }
+    await fetchRegisterCounts(selectedYear);
   };
 
   const handleBatchDeleteEntries = async (ids: number[]) => {
@@ -417,12 +435,7 @@ export default function App() {
 
     showNotification(`${count} baris data register berhasil dihapus.`);
 
-    const registerResponse = await authFetch("/api/registers");
-    const registerData = await registerResponse.json();
-
-    if (registerData.registers) {
-      setRegisters(registerData.registers);
-    }
+    await fetchRegisterCounts(selectedYear);
   };
 
   const handleSeedSample = async () => {
@@ -553,6 +566,7 @@ export default function App() {
                 <RegisterSelector
                   registers={registers}
                   selectedCode={selectedCode}
+                  selectedYear={selectedYear}
                   onSelect={setSelectedCode}
                 />
 
@@ -561,11 +575,16 @@ export default function App() {
                   entries={entries}
                   officers={officers}
                   settings={settings}
+                  selectedYear={selectedYear}
+                  onYearChange={setSelectedYear}
                   onSaveEntry={handleSaveEntry}
                   onDeleteEntry={handleDeleteEntry}
                   onBatchDeleteEntries={handleBatchDeleteEntries}
                   onUpdateSettings={handleUpdateSettings}
-                  onReload={() => void fetchEntries(selectedCode)}
+                  onReload={() => {
+                    void fetchEntries(selectedCode, true);
+                    void fetchRegisterCounts(selectedYear);
+                  }}
                 />
               </div>
             )}

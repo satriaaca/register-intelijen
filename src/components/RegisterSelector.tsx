@@ -23,6 +23,7 @@ type RegisterItem = RegisterDefinition & { entryCount?: number };
 interface RegisterSelectorProps {
   registers: RegisterItem[];
   selectedCode: string;
+  selectedYear?: number;
   onSelect: (code: string) => void;
 }
 
@@ -150,6 +151,7 @@ const RegisterChip: React.FC<RegisterChipProps> = ({ reg, isSelected, onSelect }
 export const RegisterSelector: React.FC<RegisterSelectorProps> = ({
   registers,
   selectedCode,
+  selectedYear,
   onSelect,
 }) => {
   const [search, setSearch] = useState("");
@@ -172,7 +174,9 @@ export const RegisterSelector: React.FC<RegisterSelectorProps> = ({
           <h2 className="text-xs sm:text-sm font-bold text-slate-800 uppercase tracking-tight">
             Pilih Register ({registers.length} Format R.IN)
           </h2>
-          <p className="text-[11px] text-slate-500">Total {totalEntries} entri tercatat</p>
+          <p className="text-[11px] text-slate-500">
+            Total {totalEntries} entri tercatat{selectedYear ? ` (Tahun ${selectedYear})` : ""}
+          </p>
         </div>
         <div className="relative w-full sm:w-52">
           <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2" />

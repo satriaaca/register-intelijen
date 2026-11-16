@@ -515,25 +515,44 @@ export async function importRegisterEntriesBatch(
   }
 }
 
-export async function getRegistersSummary() {
+export async function getRegistersSummary(year?: number) {
   try {
-    const counts = await db
-      .select({
-        registerCode: registerEntries.registerCode,
-        count: sql<number>`count(*)::int`,
-      })
-      .from(registerEntries)
-      .groupBy(registerEntries.registerCode);
-
     const officersCount = await db
       .select({ count: sql<number>`count(*)::int` })
       .from(officers);
 
     const countMap: Record<string, number> = {};
     let totalEntries = 0;
-    for (const row of counts) {
-      countMap[row.registerCode] = row.count;
-      totalEntries += row.count;
+
+    if (typeof year === "number" && !Number.isNaN(year)) {
+      const rows = await db
+        .select({
+          registerCode: registerEntries.registerCode,
+          tgl: registerEntries.tgl,
+          dataJson: registerEntries.dataJson,
+          createdAt: registerEntries.createdAt,
+        })
+        .from(registerEntries);
+
+      for (const row of rows) {
+        if (extractYearFromEntry(row) === year) {
+          countMap[row.registerCode] = (countMap[row.registerCode] || 0) + 1;
+          totalEntries += 1;
+        }
+      }
+    } else {
+      const counts = await db
+        .select({
+          registerCode: registerEntries.registerCode,
+          count: sql<number>`count(*)::int`,
+        })
+        .from(registerEntries)
+        .groupBy(registerEntries.registerCode);
+
+      for (const row of counts) {
+        countMap[row.registerCode] = row.count;
+        totalEntries += row.count;
+      }
     }
 
     return {
