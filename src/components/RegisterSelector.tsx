@@ -16,7 +16,7 @@ import {
   useTransitionStyles,
 } from "@floating-ui/react";
 import { RegisterDefinition } from "../types.js";
-import { BookOpen, Check, Search, X } from "lucide-react";
+import { BookOpen, Check, ChevronDown, ChevronUp, Search, X } from "lucide-react";
 
 type RegisterItem = RegisterDefinition & {
   entryCount?: number;
@@ -215,6 +215,9 @@ export const RegisterSelector: React.FC<RegisterSelectorProps> = ({
 }) => {
   const [search, setSearch] = useState("");
   const [activeCategory, setActiveCategory] = useState<string>("Semua");
+  const [isExpandedAll, setIsExpandedAll] = useState(false);
+
+  const COLLAPSED_LIMIT = 6;
 
   const categories = useMemo(() => {
     const unique = Array.from(new Set(registers.map((r) => r.category)));
@@ -239,6 +242,28 @@ export const RegisterSelector: React.FC<RegisterSelectorProps> = ({
     });
   }, [registers, search, activeCategory]);
 
+  const isCollapsibleView =
+    !search.trim() &&
+    activeCategory === "Semua" &&
+    filteredRegisters.length > COLLAPSED_LIMIT;
+
+  const visibleRegisters = useMemo(() => {
+    if (!isCollapsibleView || isExpandedAll) {
+      return filteredRegisters;
+    }
+    const baseSlice = filteredRegisters.slice(0, COLLAPSED_LIMIT);
+    const hasSelectedInSlice = baseSlice.some((r) => r.code === selectedCode);
+    if (hasSelectedInSlice) {
+      return baseSlice;
+    }
+    const activeItem = filteredRegisters.find((r) => r.code === selectedCode);
+    if (!activeItem) {
+      return baseSlice;
+    }
+    return [...filteredRegisters.slice(0, COLLAPSED_LIMIT - 1), activeItem];
+  }, [filteredRegisters, isCollapsibleView, isExpandedAll, selectedCode]);
+
+  const hiddenCount = Math.max(0, filteredRegisters.length - visibleRegisters.length);
   const activeReg = registers.find((r) => r.code === selectedCode);
 
   return (
@@ -315,17 +340,42 @@ export const RegisterSelector: React.FC<RegisterSelectorProps> = ({
       </div>
 
       {/* Grid Card R.IN.1 s/d R.IN.22 */}
-      {filteredRegisters.length > 0 ? (
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
-          {filteredRegisters.map((reg) => (
-            <RegisterCard
-              key={reg.code}
-              reg={reg}
-              isSelected={reg.code === selectedCode}
-              onSelect={onSelect}
-            />
-          ))}
-        </div>
+      {visibleRegisters.length > 0 ? (
+        <>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
+            {visibleRegisters.map((reg) => (
+              <RegisterCard
+                key={reg.code}
+                reg={reg}
+                isSelected={reg.code === selectedCode}
+                onSelect={onSelect}
+              />
+            ))}
+          </div>
+
+          {isCollapsibleView && (
+            <div className="mt-3 flex justify-center border-t border-slate-100 pt-2.5">
+              <button
+                id="btn-toggle-expand-registers"
+                type="button"
+                onClick={() => setIsExpandedAll((prev) => !prev)}
+                className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-3.5 py-1.5 text-xs font-semibold text-slate-700 transition hover:border-emerald-500/60 hover:bg-emerald-50/60 hover:text-emerald-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600"
+              >
+                {isExpandedAll ? (
+                  <>
+                    <ChevronUp className="h-3.5 w-3.5 text-emerald-700" />
+                    <span>Tampilkan Lebih Sedikit</span>
+                  </>
+                ) : (
+                  <>
+                    <ChevronDown className="h-3.5 w-3.5 text-emerald-700" />
+                    <span>Lihat Lainnya ({hiddenCount} Register lagi)</span>
+                  </>
+                )}
+              </button>
+            </div>
+          )}
+        </>
       ) : (
         <div className="rounded-lg border border-dashed border-slate-200 py-6 text-center text-xs text-slate-500">
           Register dengan kata kunci "{search}" tidak ditemukan.
