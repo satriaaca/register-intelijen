@@ -3,6 +3,7 @@ import { officers, registerEntries, registers, settings, storageCodes, registerL
 import { eq, desc, asc, and, inArray, sql } from "drizzle-orm";
 import { Officer, AppSettings, StorageCodeMapping, RegisterLock, RegisterRekapitulasiRecord, ArchiveYearStats, DatabaseArchiveStats, ArchivePackage } from "../types.js";
 import { DEFAULT_SETTINGS, INITIAL_OFFICERS, REGISTER_DEFINITIONS } from "../lib/constants.js";
+import { extractDateFromEntry, extractNormalizedIsoDate } from "../lib/date-utils.js";
 
 export async function ensureTablesExist(): Promise<void> {
   try {
@@ -515,27 +516,68 @@ export async function importRegisterEntriesBatch(
   }
 }
 
-export async function getRegistersSummary(year?: number) {
+export async function getRegistersSummary(year?: number, month?: number | "all") {
   try {
     const officersCount = await db
       .select({ count: sql<number>`count(*)::int` })
       .from(officers);
 
     const countMap: Record<string, number> = {};
+    const yearCountMap: Record<string, number> = {};
     let totalEntries = 0;
+    let yearlyTotalEntries = 0;
 
     if (typeof year === "number" && !Number.isNaN(year)) {
       const rows = await db
         .select({
           registerCode: registerEntries.registerCode,
           tgl: registerEntries.tgl,
-          dataJson: registerEntries.dataJson,
+          dataJson: sql<string | null>`CASE WHEN ${registerEntries.tgl} IS NULL OR ${registerEntries.tgl} = '' THEN ${registerEntries.dataJson} ELSE NULL END`,
           createdAt: registerEntries.createdAt,
         })
         .from(registerEntries);
 
+      const yearPrefix = `${year}-`;
+      const hasSpecificMonth = typeof month === "number" && !Number.isNaN(month) && month >= 1 && month <= 12;
+      const monthPrefix = hasSpecificMonth
+        ? `${year}-${String(month).padStart(2, "0")}`
+        : null;
+
       for (const row of rows) {
-        if (extractYearFromEntry(row) === year) {
+        let parsedData: Record<string, any> = {};
+        if (row.dataJson) {
+          try {
+            parsedData = JSON.parse(row.dataJson);
+          } catch {
+            parsedData = {};
+          }
+        }
+
+        const normalizedDate = extractDateFromEntry({
+          id: 0,
+          registerCode: row.registerCode,
+          nomorUrut: 0,
+          tgl: row.tgl,
+          data: parsedData,
+          createdAt: row.createdAt ? row.createdAt.toISOString() : undefined,
+        });
+
+        // Match client filterEntriesByPeriod semantics:
+        // include entry in year if normalizedDate starts with YYYY- (or has no date at all)
+        const matchesYear = !normalizedDate
+          ? true
+          : normalizedDate.startsWith(yearPrefix) || !normalizedDate.includes("-");
+
+        if (!matchesYear) continue;
+
+        yearCountMap[row.registerCode] = (yearCountMap[row.registerCode] || 0) + 1;
+        yearlyTotalEntries += 1;
+
+        const matchesPeriod = !monthPrefix || !normalizedDate
+          ? true
+          : normalizedDate.startsWith(monthPrefix);
+
+        if (matchesPeriod) {
           countMap[row.registerCode] = (countMap[row.registerCode] || 0) + 1;
           totalEntries += 1;
         }
@@ -551,23 +593,29 @@ export async function getRegistersSummary(year?: number) {
 
       for (const row of counts) {
         countMap[row.registerCode] = row.count;
+        yearCountMap[row.registerCode] = row.count;
         totalEntries += row.count;
+        yearlyTotalEntries += row.count;
       }
     }
 
     return {
       totalRegisters: REGISTER_DEFINITIONS.length,
       totalEntries,
+      yearlyTotalEntries,
       totalOfficers: officersCount[0]?.count || 0,
       countsByRegister: countMap,
+      yearlyCountsByRegister: yearCountMap,
     };
   } catch (error) {
     console.error("Failed to get registers summary:", error);
     return {
       totalRegisters: 22,
       totalEntries: 0,
+      yearlyTotalEntries: 0,
       totalOfficers: 0,
       countsByRegister: {},
+      yearlyCountsByRegister: {},
     };
   }
 }
@@ -846,56 +894,39 @@ export function extractYearFromEntry(entry: {
   dataJson?: string | null;
   createdAt?: Date | null;
 }): number {
+  let parsedData: Record<string, any> = {};
+  if (entry.dataJson) {
+    try {
+      parsedData = typeof entry.dataJson === "string" ? JSON.parse(entry.dataJson) : entry.dataJson;
+    } catch {
+      parsedData = {};
+    }
+  }
+
+  const normalized = extractDateFromEntry({
+    id: 0,
+    registerCode: "",
+    nomorUrut: 0,
+    tgl: entry.tgl || undefined,
+    data: parsedData,
+    createdAt: entry.createdAt ? entry.createdAt.toISOString() : undefined,
+  });
+
+  if (normalized) {
+    const iso = extractNormalizedIsoDate(normalized) || normalized;
+    const match = iso.match(/^(\d{4})-/);
+    if (match) return parseInt(match[1], 10);
+  }
+
   if (entry.tgl) {
     const match = String(entry.tgl).match(/\b(19\d\d|20\d\d)\b/);
     if (match) return parseInt(match[1], 10);
   }
-  if (entry.dataJson) {
-    try {
-      const data = typeof entry.dataJson === "string" ? JSON.parse(entry.dataJson) : entry.dataJson;
-      const dateKeys = [
-        "tgl",
-        "tanggal",
-        "tgl_terima",
-        "tgl_surat",
-        "tgl_diterima",
-        "tgl_dikirim",
-        "tgl_lapinhar",
-        "tgl_lapinsus",
-        "tgl_lapintel",
-        "tgl_prodin",
-        "tgl_kegiatan",
-        "tgl_operasi",
-        "tgl_lid",
-        "tgl_pam",
-        "tgl_gal",
-        "tgl_surat_tugas",
-        "tgl_pemantauan",
-        "tgl_permohonan",
-        "tgl_mulai",
-        "tgl_selesai",
-        "waktu_kejadian",
-        "pemaparan_tanggal",
-        "waktu_lapor",
-      ];
-      for (const key of dateKeys) {
-        if (data[key]) {
-          const match = String(data[key]).match(/\b(19\d\d|20\d\d)\b/);
-          if (match) return parseInt(match[1], 10);
-        }
-      }
-      for (const val of Object.values(data)) {
-        if (typeof val === "string") {
-          const match = val.match(/\b(19\d\d|20\d\d)\b/);
-          if (match) return parseInt(match[1], 10);
-        }
-      }
-    } catch (e) {}
-  }
+
   if (entry.createdAt) {
     return new Date(entry.createdAt).getFullYear();
   }
-  return 2026;
+  return new Date().getFullYear();
 }
 
 export function extractYearFromPeriodKey(periodKey: string): number {

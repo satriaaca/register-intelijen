@@ -73,6 +73,8 @@ interface RegisterDocumentViewProps {
   settings: AppSettings;
   selectedYear?: number;
   onYearChange?: (year: number) => void;
+  selectedMonth?: number | "all";
+  onMonthChange?: (month: number | "all") => void;
   onSaveEntry: (data: {
     id?: number;
     nomorUrut: number;
@@ -154,6 +156,8 @@ export const RegisterDocumentView: React.FC<RegisterDocumentViewProps> = ({
   settings,
   selectedYear: controlledYear,
   onYearChange,
+  selectedMonth: controlledMonth,
+  onMonthChange,
   onSaveEntry,
   onDeleteEntry,
   onBatchDeleteEntries,
@@ -198,7 +202,12 @@ export const RegisterDocumentView: React.FC<RegisterDocumentViewProps> = ({
     setInternalYear(year);
     onYearChange?.(year);
   };
-  const [selectedMonth, setSelectedMonth] = useState<number | "all">(() => currentCalendarMonth);
+  const [internalMonth, setInternalMonth] = useState<number | "all">(() => currentCalendarMonth);
+  const selectedMonth = controlledMonth !== undefined ? controlledMonth : internalMonth;
+  const setSelectedMonth = (month: number | "all") => {
+    setInternalMonth(month);
+    onMonthChange?.(month);
+  };
 
   // Filter Kategori Khusus R.IN.3
   const [rin3CategoryFilter, setRin3CategoryFilter] = useState<Rin3CategoryType | "all">("all");

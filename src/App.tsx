@@ -47,9 +47,12 @@ export default function App() {
 
   const [selectedCode, setSelectedCode] = useState("R.IN.1");
   const [selectedYear, setSelectedYear] = useState<number>(() => new Date().getFullYear());
+  const [selectedMonth, setSelectedMonth] = useState<number | "all">(
+    () => new Date().getMonth() + 1,
+  );
 
   const [registers, setRegisters] = useState<
-    (RegisterDefinition & { entryCount?: number })[]
+    (RegisterDefinition & { entryCount?: number; yearlyEntryCount?: number })[]
   >(getInitialRegisters);
 
   const [entries, setEntries] = useState<RegisterEntryRow[]>([]);
@@ -57,11 +60,13 @@ export default function App() {
 
   // Client-side in-memory cache untuk entri register agar perpindahan register instan (0ms)
   const entriesCacheRef = useRef<Map<string, RegisterEntryRow[]>>(new Map());
+  const countsRequestIdRef = useRef(0);
 
   const [settings, setSettings] = useState<AppSettings>(getCachedSettings);
 
   const [isLoading, setIsLoading] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [isLoadingCounts, setIsLoadingCounts] = useState(false);
   const [isSeeding, setIsSeeding] = useState(false);
 
   /*
@@ -87,42 +92,74 @@ export default function App() {
     }, 3500);
   };
 
-  const fetchRegisterCounts = async (year = selectedYear) => {
+  const fetchRegisterCounts = async (
+    year = selectedYear,
+    month: number | "all" = selectedMonth,
+  ) => {
+    const reqId = ++countsRequestIdRef.current;
     try {
-      const registerResponse = await authFetch(`/api/registers?year=${encodeURIComponent(year)}`);
+      setIsLoadingCounts(true);
+      const registerResponse = await authFetch(
+        `/api/registers?year=${encodeURIComponent(year)}&month=${encodeURIComponent(String(month))}`,
+      );
+      if (reqId !== countsRequestIdRef.current) return;
       if (registerResponse.ok) {
         const registerData = await registerResponse.json();
+        if (reqId !== countsRequestIdRef.current) return;
         if (registerData.registers) {
           setRegisters(registerData.registers);
         }
-        if (registerData.summary?.countsByRegister) {
+        const now = new Date();
+        if (
+          registerData.summary?.countsByRegister &&
+          year === now.getFullYear() &&
+          month === now.getMonth() + 1
+        ) {
           setCachedRegisterCounts(registerData.summary.countsByRegister);
         }
       }
     } catch (error) {
       console.error("Error refreshing register counts:", error);
+    } finally {
+      if (reqId === countsRequestIdRef.current) {
+        setIsLoadingCounts(false);
+      }
     }
   };
 
-  const fetchData = async (targetCode = selectedCode, targetYear = selectedYear) => {
+  const fetchData = async (
+    targetCode = selectedCode,
+    targetYear = selectedYear,
+    targetMonth: number | "all" = selectedMonth,
+  ) => {
+    const countsReqId = ++countsRequestIdRef.current;
     try {
       setIsSyncing(true);
 
       const [regResponse, officerResponse, settingsResponse, entriesResponse] =
         await Promise.all([
-          authFetch(`/api/registers?year=${encodeURIComponent(targetYear)}`),
+          authFetch(
+            `/api/registers?year=${encodeURIComponent(targetYear)}&month=${encodeURIComponent(String(targetMonth))}`,
+          ),
           authFetch("/api/officers"),
           authFetch("/api/settings"),
           authFetch(`/api/registers/${targetCode}/entries`),
         ]);
 
-      if (regResponse.ok) {
+      if (regResponse.ok && countsReqId === countsRequestIdRef.current) {
         const regData = await regResponse.json();
-        if (regData.registers) {
-          setRegisters(regData.registers);
-        }
-        if (regData.summary?.countsByRegister) {
-          setCachedRegisterCounts(regData.summary.countsByRegister);
+        if (countsReqId === countsRequestIdRef.current) {
+          if (regData.registers) {
+            setRegisters(regData.registers);
+          }
+          const now = new Date();
+          if (
+            regData.summary?.countsByRegister &&
+            targetYear === now.getFullYear() &&
+            targetMonth === now.getMonth() + 1
+          ) {
+            setCachedRegisterCounts(regData.summary.countsByRegister);
+          }
         }
       }
 
@@ -194,7 +231,7 @@ export default function App() {
 
   useEffect(() => {
     if (currentUser) {
-      void fetchData(selectedCode, selectedYear);
+      void fetchData(selectedCode, selectedYear, selectedMonth);
     }
   }, [currentUser]);
 
@@ -209,16 +246,16 @@ export default function App() {
     }
   }, [selectedCode]);
 
-  const hasYearMountedRef = useRef(false);
+  const hasPeriodMountedRef = useRef(false);
   useEffect(() => {
-    if (!hasYearMountedRef.current) {
-      hasYearMountedRef.current = true;
+    if (!hasPeriodMountedRef.current) {
+      hasPeriodMountedRef.current = true;
       return;
     }
     if (currentUser) {
-      void fetchRegisterCounts(selectedYear);
+      void fetchRegisterCounts(selectedYear, selectedMonth);
     }
-  }, [selectedYear]);
+  }, [selectedYear, selectedMonth]);
 
   const handleLogout = async () => {
     try {
@@ -340,7 +377,7 @@ export default function App() {
 
     entriesCacheRef.current.delete(selectedCode.toLowerCase());
     await fetchEntries(selectedCode, true);
-    await fetchRegisterCounts(selectedYear);
+    await fetchRegisterCounts(selectedYear, selectedMonth);
   };
 
   const handleDeleteEntry = async (id: number) => {
@@ -360,7 +397,7 @@ export default function App() {
 
     showNotification("Baris data register berhasil dihapus.");
 
-    await fetchRegisterCounts(selectedYear);
+    await fetchRegisterCounts(selectedYear, selectedMonth);
   };
 
   const handleBatchDeleteEntries = async (ids: number[]) => {
@@ -435,7 +472,7 @@ export default function App() {
 
     showNotification(`${count} baris data register berhasil dihapus.`);
 
-    await fetchRegisterCounts(selectedYear);
+    await fetchRegisterCounts(selectedYear, selectedMonth);
   };
 
   const handleSeedSample = async () => {
@@ -567,6 +604,8 @@ export default function App() {
                   registers={registers}
                   selectedCode={selectedCode}
                   selectedYear={selectedYear}
+                  selectedMonth={selectedMonth}
+                  isLoadingCounts={isLoadingCounts}
                   onSelect={setSelectedCode}
                 />
 
@@ -577,13 +616,15 @@ export default function App() {
                   settings={settings}
                   selectedYear={selectedYear}
                   onYearChange={setSelectedYear}
+                  selectedMonth={selectedMonth}
+                  onMonthChange={setSelectedMonth}
                   onSaveEntry={handleSaveEntry}
                   onDeleteEntry={handleDeleteEntry}
                   onBatchDeleteEntries={handleBatchDeleteEntries}
                   onUpdateSettings={handleUpdateSettings}
                   onReload={() => {
                     void fetchEntries(selectedCode, true);
-                    void fetchRegisterCounts(selectedYear);
+                    void fetchRegisterCounts(selectedYear, selectedMonth);
                   }}
                 />
               </div>

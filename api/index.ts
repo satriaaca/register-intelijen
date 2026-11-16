@@ -190,11 +190,23 @@ app.get("/api/registers", async (req, res) => {
     try {
         const rawYear = req.query.year ? Number.parseInt(String(req.query.year), 10) : undefined;
         const year = rawYear && !Number.isNaN(rawYear) ? rawYear : undefined;
-        const summary = await getRegistersSummary(year);
+        const rawMonth = req.query.month ? String(req.query.month).trim() : undefined;
+        const parsedMonth =
+            rawMonth && rawMonth !== "all" ? Number.parseInt(rawMonth, 10) : undefined;
+        const month: number | "all" | undefined =
+            rawMonth === "all"
+                ? "all"
+                : parsedMonth && !Number.isNaN(parsedMonth) && parsedMonth >= 1 && parsedMonth <= 12
+                ? parsedMonth
+                : undefined;
+        const summary = await getRegistersSummary(year, month);
 
         const registers = REGISTER_DEFINITIONS.map((definition) => ({
             ...definition,
             entryCount: summary.countsByRegister[definition.code] || 0,
+            yearlyEntryCount:
+                summary.yearlyCountsByRegister?.[definition.code] ??
+                (summary.countsByRegister[definition.code] || 0),
         }));
 
         res.json({ registers, summary });

@@ -16,27 +16,43 @@ import {
   useTransitionStyles,
 } from "@floating-ui/react";
 import { RegisterDefinition } from "../types.js";
-import { Search } from "lucide-react";
+import { MONTH_NAMES_ID, MONTH_SHORT_ID } from "../lib/date-utils.js";
+import { Loader2, Search } from "lucide-react";
 
-type RegisterItem = RegisterDefinition & { entryCount?: number };
+type RegisterItem = RegisterDefinition & {
+  entryCount?: number;
+  yearlyEntryCount?: number;
+};
 
 interface RegisterSelectorProps {
   registers: RegisterItem[];
   selectedCode: string;
   selectedYear?: number;
+  selectedMonth?: number | "all";
+  isLoadingCounts?: boolean;
   onSelect: (code: string) => void;
 }
 
 interface RegisterChipProps {
   reg: RegisterItem;
   isSelected: boolean;
+  selectedYear?: number;
+  selectedMonth?: number | "all";
   onSelect: (code: string) => void;
 }
 
-const RegisterChip: React.FC<RegisterChipProps> = ({ reg, isSelected, onSelect }) => {
+const RegisterChip: React.FC<RegisterChipProps> = ({
+  reg,
+  isSelected,
+  selectedYear,
+  selectedMonth,
+  onSelect,
+}) => {
   const [open, setOpen] = useState(false);
   const arrowRef = useRef<SVGSVGElement>(null);
   const count = reg.entryCount ?? 0;
+  const yearlyCount = reg.yearlyEntryCount;
+  const hasMonthlyFilter = typeof selectedMonth === "number" && selectedMonth >= 1 && selectedMonth <= 12;
 
   const { refs, floatingStyles, context } = useFloating({
     open,
@@ -68,6 +84,8 @@ const RegisterChip: React.FC<RegisterChipProps> = ({ reg, isSelected, onSelect }
     role,
   ]);
 
+  const hasEntriesInYear = (yearlyCount ?? count) > 0;
+
   return (
     <>
       <button
@@ -81,6 +99,8 @@ const RegisterChip: React.FC<RegisterChipProps> = ({ reg, isSelected, onSelect }
             ? "bg-emerald-700 text-white border-emerald-700 shadow-sm"
             : count > 0
             ? "bg-slate-50 text-slate-800 border-slate-200 hover:bg-white hover:border-emerald-500 hover:-translate-y-px hover:shadow-sm"
+            : hasEntriesInYear
+            ? "bg-slate-50 text-slate-600 border-slate-200 hover:bg-white hover:border-emerald-400 hover:-translate-y-px"
             : "bg-slate-50 text-slate-400 border-slate-200 hover:bg-white hover:border-slate-300 hover:-translate-y-px"
         }`}
       >
@@ -108,7 +128,7 @@ const RegisterChip: React.FC<RegisterChipProps> = ({ reg, isSelected, onSelect }
           >
             <div
               style={transitionStyles}
-              className="w-60 rounded-lg bg-slate-900 text-white p-2.5 shadow-lg font-sans"
+              className="w-64 rounded-lg bg-slate-900 text-white p-2.5 shadow-lg font-sans"
             >
               <div className="flex items-center justify-between mb-1">
                 <span className="font-mono text-[10px] font-bold text-emerald-300">
@@ -132,12 +152,22 @@ const RegisterChip: React.FC<RegisterChipProps> = ({ reg, isSelected, onSelect }
                 </p>
               )}
 
-              <div className="flex items-center justify-between mt-2 pt-1.5 border-t border-white/10 text-[10px] text-slate-300">
-                <span>{reg.category}</span>
-                <span className={count > 0 ? "text-emerald-300 font-semibold" : "text-slate-500"}>
-                  {count > 0 ? `${count} entri` : "Belum ada entri"}
+              <div className="flex items-center justify-between gap-2 mt-2 pt-1.5 border-t border-white/10 text-[10px] text-slate-300">
+                <span className="truncate">{reg.category}</span>
+                <span className={count > 0 ? "text-emerald-300 font-semibold whitespace-nowrap" : "text-slate-400 whitespace-nowrap"}>
+                  {hasMonthlyFilter
+                    ? `${count} entri (${MONTH_SHORT_ID[selectedMonth - 1]} ${selectedYear ?? ""})`
+                    : count > 0
+                    ? `${count} entri`
+                    : "Belum ada entri"}
                 </span>
               </div>
+
+              {hasMonthlyFilter && typeof yearlyCount === "number" && (
+                <div className="mt-1 text-right text-[9px] text-slate-400">
+                  Total tahun {selectedYear ?? ""}: {yearlyCount} entri
+                </div>
+              )}
 
               <FloatingArrow ref={arrowRef} context={context} fill="#0f172a" />
             </div>
@@ -152,6 +182,8 @@ export const RegisterSelector: React.FC<RegisterSelectorProps> = ({
   registers,
   selectedCode,
   selectedYear,
+  selectedMonth,
+  isLoadingCounts = false,
   onSelect,
 }) => {
   const [search, setSearch] = useState("");
@@ -166,16 +198,45 @@ export const RegisterSelector: React.FC<RegisterSelectorProps> = ({
   });
 
   const totalEntries = registers.reduce((sum, r) => sum + (r.entryCount ?? 0), 0);
+  const hasYearlyCounts = registers.some((r) => typeof r.yearlyEntryCount === "number");
+  const yearlyTotal = hasYearlyCounts
+    ? registers.reduce((sum, r) => sum + (r.yearlyEntryCount ?? r.entryCount ?? 0), 0)
+    : undefined;
+  const hasSpecificMonth =
+    typeof selectedMonth === "number" && selectedMonth >= 1 && selectedMonth <= 12;
 
   return (
     <div className="bg-white rounded-lg shadow-2xs border border-slate-200 p-3 mb-5">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
         <div>
-          <h2 className="text-xs sm:text-sm font-bold text-slate-800 uppercase tracking-tight">
-            Pilih Register ({registers.length} Format R.IN)
-          </h2>
+          <div className="flex items-center gap-2">
+            <h2 className="text-xs sm:text-sm font-bold text-slate-800 uppercase tracking-tight">
+              Pilih Register ({registers.length} Format R.IN)
+            </h2>
+            {isLoadingCounts && (
+              <span className="inline-flex items-center gap-1 text-[10px] font-medium text-emerald-700">
+                <Loader2 className="h-3 w-3 animate-spin" />
+                <span>Menghitung...</span>
+              </span>
+            )}
+          </div>
           <p className="text-[11px] text-slate-500">
-            Total {totalEntries} entri tercatat{selectedYear ? ` (Tahun ${selectedYear})` : ""}
+            {hasSpecificMonth && selectedYear ? (
+              <>
+                Total <strong className="text-slate-700">{totalEntries}</strong> entri pada{" "}
+                <strong className="text-slate-700">
+                  {MONTH_NAMES_ID[selectedMonth - 1]} {selectedYear}
+                </strong>
+                {typeof yearlyTotal === "number" ? (
+                  <span> ({yearlyTotal} total tahun {selectedYear})</span>
+                ) : null}
+              </>
+            ) : (
+              <>
+                Total <strong className="text-slate-700">{totalEntries}</strong> entri tercatat
+                {selectedYear ? ` (Tahun ${selectedYear} · Semua Bulan)` : ""}
+              </>
+            )}
           </p>
         </div>
         <div className="relative w-full sm:w-52">
@@ -197,6 +258,8 @@ export const RegisterSelector: React.FC<RegisterSelectorProps> = ({
             key={reg.code}
             reg={reg}
             isSelected={reg.code === selectedCode}
+            selectedYear={selectedYear}
+            selectedMonth={selectedMonth}
             onSelect={onSelect}
           />
         ))}

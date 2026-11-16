@@ -96,7 +96,7 @@ export function getClosingDateForPeriod(
   return getDefaultClosingDate(year, month1Indexed);
 }
 
-function extractNormalizedIsoDate(raw: string): string | null {
+export function extractNormalizedIsoDate(raw: string): string | null {
   const trimmed = raw.trim();
   const isoMatch = trimmed.match(/\b(\d{4})-(\d{1,2})-(\d{1,2})\b/);
   if (isoMatch) {

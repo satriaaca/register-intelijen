@@ -91,6 +91,26 @@ describe("date-utils", () => {
       };
       expect(extractDateFromEntry(entry as RegisterEntryRow)).toBeNull();
     });
+    it("should extract date from Indonesian DD-MM-YYYY format inside data fields", () => {
+      const entry: Partial<RegisterEntryRow> = {
+        id: 5,
+        data: {
+          tgl_no_surat: "R-2029/N.1.17.2/Dsb.4/10/2026 tgl. 22-10-2026",
+        },
+      };
+      expect(extractDateFromEntry(entry as RegisterEntryRow)).toBe("2026-10-04");
+    });
+
+    it("should prioritize explicit YYYY-MM-DD in data_tgl_surat over letter number", () => {
+      const entry: Partial<RegisterEntryRow> = {
+        id: 6,
+        tgl: "2026-10-22",
+        data: {
+          tgl_no_surat: "R-2029/N.1.17.2/Dsb.4/10/2026 tgl. 22-10-2026",
+        },
+      };
+      expect(extractDateFromEntry(entry as RegisterEntryRow)).toBe("2026-10-22");
+    });
   });
 
   describe("filterEntriesByPeriod", () => {
@@ -117,6 +137,15 @@ describe("date-utils", () => {
         "all"
       );
       expect(filtered.map((e) => e.id)).toEqual([1, 2, 3]);
+    });
+
+    it("should return empty array when filtering a year with no entries", () => {
+      const filtered = filterEntriesByPeriod(
+        mockEntries as RegisterEntryRow[],
+        2024,
+        "all"
+      );
+      expect(filtered).toEqual([]);
     });
   });
 });
