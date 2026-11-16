@@ -603,9 +603,6 @@ export default function App() {
                 <RegisterSelector
                   registers={registers}
                   selectedCode={selectedCode}
-                  selectedYear={selectedYear}
-                  selectedMonth={selectedMonth}
-                  isLoadingCounts={isLoadingCounts}
                   onSelect={setSelectedCode}
                 />
 

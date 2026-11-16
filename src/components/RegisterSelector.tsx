@@ -1,4 +1,4 @@
-import React, { useRef, useState } from "react";
+import React, { useMemo, useRef, useState } from "react";
 import {
   useFloating,
   autoUpdate,
@@ -16,8 +16,7 @@ import {
   useTransitionStyles,
 } from "@floating-ui/react";
 import { RegisterDefinition } from "../types.js";
-import { MONTH_NAMES_ID, MONTH_SHORT_ID } from "../lib/date-utils.js";
-import { Loader2, Search } from "lucide-react";
+import { BookOpen, Check, Search, X } from "lucide-react";
 
 type RegisterItem = RegisterDefinition & {
   entryCount?: number;
@@ -27,32 +26,61 @@ type RegisterItem = RegisterDefinition & {
 interface RegisterSelectorProps {
   registers: RegisterItem[];
   selectedCode: string;
-  selectedYear?: number;
-  selectedMonth?: number | "all";
-  isLoadingCounts?: boolean;
   onSelect: (code: string) => void;
 }
 
-interface RegisterChipProps {
+const SHORT_LABELS: Record<string, string> = {
+  "R.IN.1": "Surat Masuk Biasa / Rahasia",
+  "R.IN.2": "Surat Keluar Biasa / Rahasia",
+  "R.IN.3": "Kerja Intelijen (5 Bidang)",
+  "R.IN.4": "Ekspedisi Surat Biasa / Rahasia",
+  "R.IN.5": "Produk Intelijen",
+  "R.IN.6": "Arsip Intelijen",
+  "R.IN.7": "Kegiatan Bid. Ipoleksoshankam",
+  "R.IN.8": "Kegiatan Bid. Sosbudmas",
+  "R.IN.9": "Kegiatan Bid. Ekonomi & Keuangan",
+  "R.IN.10": "Kegiatan Bid. PPS",
+  "R.IN.11": "Kegiatan Bid. TI & Prodin",
+  "R.IN.12": "Operasi Bid. Ipoleksoshankam",
+  "R.IN.13": "Operasi Bid. Sosbudmas",
+  "R.IN.14": "Operasi Bid. Ekonomi & Keuangan",
+  "R.IN.15": "Operasi Bid. PPS",
+  "R.IN.16": "Operasi Bid. TI & Prodin",
+  "R.IN.17": "Berita Masuk (Kamar Sandi)",
+  "R.IN.18": "Berita Keluar (Kamar Sandi)",
+  "R.IN.19": "Telaahan Intelijen",
+  "R.IN.20": "Ekspedisi Berita Sandi",
+  "R.IN.21": "Tamu PPH & Pengaduan (PPM)",
+  "R.IN.22": "Penerangan & Penyuluhan Hukum",
+};
+
+const CATEGORY_TEXT_ACCENT: Record<string, string> = {
+  "Surat & Berita": "text-emerald-700",
+  "Kerja & Produk": "text-teal-700",
+  "Kegiatan Intelijen": "text-sky-700",
+  "Operasi Intelijen": "text-amber-700",
+  "Layanan & Penyuluhan": "text-indigo-700",
+};
+
+function getShortLabel(reg: RegisterItem): string {
+  if (SHORT_LABELS[reg.code]) return SHORT_LABELS[reg.code];
+  return reg.title.replace(/^REGISTER\s+/i, "");
+}
+
+interface RegisterCardProps {
   reg: RegisterItem;
   isSelected: boolean;
-  selectedYear?: number;
-  selectedMonth?: number | "all";
   onSelect: (code: string) => void;
 }
 
-const RegisterChip: React.FC<RegisterChipProps> = ({
+const RegisterCard: React.FC<RegisterCardProps> = ({
   reg,
   isSelected,
-  selectedYear,
-  selectedMonth,
   onSelect,
 }) => {
   const [open, setOpen] = useState(false);
   const arrowRef = useRef<SVGSVGElement>(null);
-  const count = reg.entryCount ?? 0;
-  const yearlyCount = reg.yearlyEntryCount;
-  const hasMonthlyFilter = typeof selectedMonth === "number" && selectedMonth >= 1 && selectedMonth <= 12;
+  const shortLabel = getShortLabel(reg);
 
   const { refs, floatingStyles, context } = useFloating({
     open,
@@ -72,7 +100,7 @@ const RegisterChip: React.FC<RegisterChipProps> = ({
     initial: { opacity: 0, transform: "translateY(4px)" },
   });
 
-  const hover = useHover(context, { move: false, delay: { open: 100, close: 0 } });
+  const hover = useHover(context, { move: false, delay: { open: 160, close: 0 } });
   const focus = useFocus(context);
   const dismiss = useDismiss(context);
   const role = useRole(context, { role: "tooltip" });
@@ -84,37 +112,53 @@ const RegisterChip: React.FC<RegisterChipProps> = ({
     role,
   ]);
 
-  const hasEntriesInYear = (yearlyCount ?? count) > 0;
+  const categoryColor = CATEGORY_TEXT_ACCENT[reg.category] || "text-slate-500";
 
   return (
     <>
       <button
         ref={refs.setReference}
+        type="button"
         id={`btn-select-${reg.code.toLowerCase().replace(/\./g, "-")}`}
         aria-pressed={isSelected}
-        aria-label={`${reg.code} ${reg.title}, ${count} entri`}
+        aria-label={`${reg.code} ${shortLabel}`}
         {...getReferenceProps({ onClick: () => onSelect(reg.code) })}
-        className={`flex items-center gap-1.5 px-2 py-1 rounded border text-[11px] font-mono font-bold transition-all duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1 ${
+        className={`group relative flex min-h-[68px] flex-col justify-between rounded-lg border p-2.5 text-left transition-all duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-offset-1 ${
           isSelected
-            ? "bg-emerald-700 text-white border-emerald-700 shadow-sm"
-            : count > 0
-            ? "bg-slate-50 text-slate-800 border-slate-200 hover:bg-white hover:border-emerald-500 hover:-translate-y-px hover:shadow-sm"
-            : hasEntriesInYear
-            ? "bg-slate-50 text-slate-600 border-slate-200 hover:bg-white hover:border-emerald-400 hover:-translate-y-px"
-            : "bg-slate-50 text-slate-400 border-slate-200 hover:bg-white hover:border-slate-300 hover:-translate-y-px"
+            ? "border-emerald-900 bg-gradient-to-br from-emerald-800 via-emerald-800 to-emerald-950 text-white shadow-md shadow-emerald-950/15"
+            : "border-slate-200/90 bg-slate-50/75 text-slate-800 hover:-translate-y-0.5 hover:border-emerald-500/60 hover:bg-white hover:shadow-md hover:shadow-slate-900/5"
         }`}
       >
-        <span>{reg.code}</span>
+        <div className="flex w-full items-center justify-between gap-1.5">
+          <span
+            className={`font-mono text-xs font-bold tracking-tight ${
+              isSelected
+                ? "text-amber-300"
+                : "text-emerald-900 group-hover:text-emerald-700"
+            }`}
+          >
+            {reg.code}
+          </span>
+
+          {isSelected ? (
+            <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-amber-400/20 text-amber-300">
+              <Check className="h-2.5 w-2.5" strokeWidth={3} />
+            </span>
+          ) : (
+            <span
+              className={`truncate text-[10px] font-medium ${categoryColor} opacity-80 group-hover:opacity-100`}
+            >
+              {reg.orientation === "landscape" ? "A4-L" : "A4-P"}
+            </span>
+          )}
+        </div>
+
         <span
-          className={`px-1.5 rounded text-[10px] ${
-            isSelected
-              ? "bg-white/20 text-white"
-              : count > 0
-              ? "bg-emerald-100 text-emerald-900"
-              : "bg-slate-200 text-slate-500"
+          className={`mt-1.5 line-clamp-2 text-[11px] font-medium leading-snug ${
+            isSelected ? "text-emerald-50" : "text-slate-600 group-hover:text-slate-900"
           }`}
         >
-          {count}
+          {shortLabel}
         </span>
       </button>
 
@@ -128,46 +172,32 @@ const RegisterChip: React.FC<RegisterChipProps> = ({
           >
             <div
               style={transitionStyles}
-              className="w-64 rounded-lg bg-slate-900 text-white p-2.5 shadow-lg font-sans"
+              className="w-68 rounded-lg border border-slate-700/60 bg-slate-900 p-3 text-white shadow-xl font-sans"
             >
-              <div className="flex items-center justify-between mb-1">
-                <span className="font-mono text-[10px] font-bold text-emerald-300">
+              <div className="flex items-center justify-between gap-2 mb-1.5">
+                <span className="font-mono text-[11px] font-bold text-amber-300">
                   {reg.code}
                 </span>
-                <span
-                  className={`text-[9px] uppercase font-bold px-1 rounded ${
-                    reg.orientation === "landscape"
-                      ? "bg-amber-400/20 text-amber-300"
-                      : "bg-sky-400/20 text-sky-300"
-                  }`}
-                >
-                  {reg.orientation === "landscape" ? "Landscape" : "Portrait"}
+                <span className="text-[10px] font-medium text-slate-300">
+                  {reg.orientation === "landscape" ? "A4 Landscape" : "A4 Portrait"}
                 </span>
               </div>
 
-              <p className="text-xs font-semibold leading-snug">{reg.title}</p>
+              <p className="text-xs font-semibold leading-snug text-white">
+                {reg.title}
+              </p>
               {reg.subtitle && (
-                <p className="text-[10px] text-slate-400 mt-0.5 leading-snug">
+                <p className="text-[10px] text-slate-400 mt-1 leading-snug line-clamp-3">
                   {reg.subtitle}
                 </p>
               )}
 
-              <div className="flex items-center justify-between gap-2 mt-2 pt-1.5 border-t border-white/10 text-[10px] text-slate-300">
-                <span className="truncate">{reg.category}</span>
-                <span className={count > 0 ? "text-emerald-300 font-semibold whitespace-nowrap" : "text-slate-400 whitespace-nowrap"}>
-                  {hasMonthlyFilter
-                    ? `${count} entri (${MONTH_SHORT_ID[selectedMonth - 1]} ${selectedYear ?? ""})`
-                    : count > 0
-                    ? `${count} entri`
-                    : "Belum ada entri"}
+              <div className="mt-2.5 pt-2 border-t border-white/10 flex items-center justify-between text-[10px] text-slate-300">
+                <span>{reg.category}</span>
+                <span className="text-emerald-300 font-medium">
+                  {isSelected ? "Sedang dibuka" : "Klik untuk membuka"}
                 </span>
               </div>
-
-              {hasMonthlyFilter && typeof yearlyCount === "number" && (
-                <div className="mt-1 text-right text-[9px] text-slate-400">
-                  Total tahun {selectedYear ?? ""}: {yearlyCount} entri
-                </div>
-              )}
 
               <FloatingArrow ref={arrowRef} context={context} fill="#0f172a" />
             </div>
@@ -181,92 +211,126 @@ const RegisterChip: React.FC<RegisterChipProps> = ({
 export const RegisterSelector: React.FC<RegisterSelectorProps> = ({
   registers,
   selectedCode,
-  selectedYear,
-  selectedMonth,
-  isLoadingCounts = false,
   onSelect,
 }) => {
   const [search, setSearch] = useState("");
+  const [activeCategory, setActiveCategory] = useState<string>("Semua");
 
-  const filteredRegisters = registers.filter((reg) => {
-    const q = search.toLowerCase();
-    return (
-      reg.code.toLowerCase().includes(q) ||
-      reg.title.toLowerCase().includes(q) ||
-      (reg.subtitle && reg.subtitle.toLowerCase().includes(q))
-    );
-  });
+  const categories = useMemo(() => {
+    const unique = Array.from(new Set(registers.map((r) => r.category)));
+    return ["Semua", ...unique];
+  }, [registers]);
 
-  const totalEntries = registers.reduce((sum, r) => sum + (r.entryCount ?? 0), 0);
-  const hasYearlyCounts = registers.some((r) => typeof r.yearlyEntryCount === "number");
-  const yearlyTotal = hasYearlyCounts
-    ? registers.reduce((sum, r) => sum + (r.yearlyEntryCount ?? r.entryCount ?? 0), 0)
-    : undefined;
-  const hasSpecificMonth =
-    typeof selectedMonth === "number" && selectedMonth >= 1 && selectedMonth <= 12;
+  const filteredRegisters = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return registers.filter((reg) => {
+      const matchesCategory =
+        q.length > 0 || activeCategory === "Semua" || reg.category === activeCategory;
+      if (!matchesCategory) return false;
+      if (!q) return true;
+      const shortLabel = getShortLabel(reg).toLowerCase();
+      return (
+        reg.code.toLowerCase().includes(q) ||
+        reg.title.toLowerCase().includes(q) ||
+        shortLabel.includes(q) ||
+        reg.category.toLowerCase().includes(q) ||
+        (reg.subtitle && reg.subtitle.toLowerCase().includes(q))
+      );
+    });
+  }, [registers, search, activeCategory]);
+
+  const activeReg = registers.find((r) => r.code === selectedCode);
 
   return (
-    <div className="bg-white rounded-lg shadow-2xs border border-slate-200 p-3 mb-5">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
-        <div>
+    <section
+      aria-label="Pemilih Buku Register Intelijen"
+      className="rounded-xl border border-slate-200 bg-white p-4 shadow-2xs mb-4"
+    >
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between mb-3.5">
+        <div className="min-w-0">
           <div className="flex items-center gap-2">
-            <h2 className="text-xs sm:text-sm font-bold text-slate-800 uppercase tracking-tight">
-              Pilih Register ({registers.length} Format R.IN)
+            <BookOpen className="h-4 w-4 shrink-0 text-emerald-700" />
+            <h2 className="text-sm font-bold tracking-tight text-slate-900">
+              Buku Register Administrasi Intelijen
             </h2>
-            {isLoadingCounts && (
-              <span className="inline-flex items-center gap-1 text-[10px] font-medium text-emerald-700">
-                <Loader2 className="h-3 w-3 animate-spin" />
-                <span>Menghitung...</span>
-              </span>
-            )}
           </div>
-          <p className="text-[11px] text-slate-500">
-            {hasSpecificMonth && selectedYear ? (
+          <p className="mt-0.5 truncate text-xs text-slate-500">
+            <span>22 Format Standar R.IN</span>
+            {activeReg && (
               <>
-                Total <strong className="text-slate-700">{totalEntries}</strong> entri pada{" "}
-                <strong className="text-slate-700">
-                  {MONTH_NAMES_ID[selectedMonth - 1]} {selectedYear}
-                </strong>
-                {typeof yearlyTotal === "number" ? (
-                  <span> ({yearlyTotal} total tahun {selectedYear})</span>
-                ) : null}
-              </>
-            ) : (
-              <>
-                Total <strong className="text-slate-700">{totalEntries}</strong> entri tercatat
-                {selectedYear ? ` (Tahun ${selectedYear} · Semua Bulan)` : ""}
+                <span aria-hidden="true" className="mx-1.5 text-slate-300">·</span>
+                <span className="font-medium text-emerald-800">
+                  Aktif: {activeReg.code} — {getShortLabel(activeReg)}
+                </span>
               </>
             )}
           </p>
         </div>
-        <div className="relative w-full sm:w-52">
-          <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2" />
+
+        <div className="relative w-full lg:w-64 shrink-0">
+          <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5 pointer-events-none" />
           <input
             id="input-search-register"
             type="text"
-            placeholder="Cari R.IN.1 atau judul..."
+            placeholder="Cari R.IN.1, surat, operasi..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-8 pr-2.5 py-1 text-xs bg-slate-50 border border-slate-300 rounded focus:outline-none focus:ring-1 focus:ring-emerald-600 focus:border-emerald-600"
+            className="w-full rounded-lg border border-slate-200 bg-slate-50 py-1.5 pl-8 pr-8 text-xs text-slate-800 placeholder:text-slate-400 transition focus:border-emerald-600 focus:bg-white focus:outline-none focus:ring-1 focus:ring-emerald-600"
           />
+          {search && (
+            <button
+              type="button"
+              onClick={() => setSearch("")}
+              aria-label="Hapus pencarian register"
+              className="absolute right-2.5 top-2 text-slate-400 hover:text-slate-600 cursor-pointer"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          )}
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-1.5">
-        {filteredRegisters.map((reg) => (
-          <RegisterChip
-            key={reg.code}
-            reg={reg}
-            isSelected={reg.code === selectedCode}
-            selectedYear={selectedYear}
-            selectedMonth={selectedMonth}
-            onSelect={onSelect}
-          />
-        ))}
-        {filteredRegisters.length === 0 && (
-          <p className="text-xs text-slate-500 py-1">Register tidak ditemukan.</p>
-        )}
+      {/* Filter Kategori Segmented Control */}
+      <div className="mb-3 flex items-center gap-1 overflow-x-auto rounded-lg bg-slate-100 p-1">
+        {categories.map((cat) => {
+          const isCatActive = !search.trim() && activeCategory === cat;
+          return (
+            <button
+              key={cat}
+              type="button"
+              onClick={() => {
+                setActiveCategory(cat);
+                if (search) setSearch("");
+              }}
+              className={`whitespace-nowrap rounded-md px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer ${
+                isCatActive
+                  ? "bg-white font-semibold text-emerald-900 shadow-2xs"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              {cat}
+            </button>
+          );
+        })}
       </div>
-    </div>
+
+      {/* Grid Card R.IN.1 s/d R.IN.22 */}
+      {filteredRegisters.length > 0 ? (
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
+          {filteredRegisters.map((reg) => (
+            <RegisterCard
+              key={reg.code}
+              reg={reg}
+              isSelected={reg.code === selectedCode}
+              onSelect={onSelect}
+            />
+          ))}
+        </div>
+      ) : (
+        <div className="rounded-lg border border-dashed border-slate-200 py-6 text-center text-xs text-slate-500">
+          Register dengan kata kunci "{search}" tidak ditemukan.
+        </div>
+      )}
+    </section>
   );
 };
