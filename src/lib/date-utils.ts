@@ -203,3 +203,45 @@ export function filterEntriesByPeriod(
     return d.startsWith(prefix);
   });
 }
+
+/**
+ * Returns 1-indexed month numbers (1..12) within selectedYear that strictly precede
+ * the current running calendar month of referenceDate.
+ */
+export function getMonthsBeforeCurrentMonth(
+  selectedYear: number,
+  referenceDate: Date = new Date()
+): number[] {
+  const currentYear = referenceDate.getFullYear();
+  const currentMonth = referenceDate.getMonth() + 1;
+
+  if (selectedYear < currentYear) {
+    return [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
+  }
+  if (selectedYear > currentYear) {
+    return [];
+  }
+
+  const months: number[] = [];
+  for (let m = 1; m < currentMonth; m++) {
+    months.push(m);
+  }
+  return months;
+}
+
+/**
+ * Checks whether (year, month1Indexed) strictly precedes the current running calendar month.
+ */
+export function isMonthBeforeCurrentMonth(
+  year: number,
+  month1Indexed: number,
+  referenceDate: Date = new Date()
+): boolean {
+  const currentYear = referenceDate.getFullYear();
+  const currentMonth = referenceDate.getMonth() + 1;
+
+  if (year < currentYear) return month1Indexed >= 1 && month1Indexed <= 12;
+  if (year > currentYear) return false;
+  return month1Indexed >= 1 && month1Indexed < currentMonth;
+}
+

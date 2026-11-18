@@ -4,6 +4,7 @@ import { eq, desc, asc, and, inArray, sql } from "drizzle-orm";
 import { Officer, AppSettings, StorageCodeMapping, RegisterLock, RegisterRekapitulasiRecord, ArchiveYearStats, DatabaseArchiveStats, ArchivePackage } from "../types.js";
 import { DEFAULT_SETTINGS, INITIAL_OFFICERS, REGISTER_DEFINITIONS } from "../lib/constants.js";
 import { extractDateFromEntry, extractNormalizedIsoDate } from "../lib/date-utils.js";
+import { formatLockPangkatNip } from "../lib/lock-utils.js";
 
 export async function ensureTablesExist(): Promise<void> {
   try {
@@ -884,6 +885,161 @@ export async function unlockRegister(
   } catch (error) {
     console.error("Failed to unlock register:", error);
     throw new Error(`Failed to unlock register: ${error}`);
+  }
+}
+
+export interface BatchRegisterLockInput {
+  items: Array<{
+    registerCode: string;
+    periodKey: string;
+    closingDate?: string;
+  }>;
+  leftSignerTitle?: string;
+  leftSignerName?: string;
+  leftSignerPangkatNip?: string;
+  rightSignerTitle?: string;
+  rightSignerName?: string;
+  rightSignerPangkatNip?: string;
+  signatureAlignment?: "split" | "center";
+  tempatDokumen?: string;
+  lockedBy?: string;
+  skipAlreadyLocked?: boolean;
+}
+
+export interface BatchRegisterLockResult {
+  lockedCount: number;
+  skippedCount: number;
+  lockedPeriods: Array<{ registerCode: string; periodKey: string }>;
+}
+
+export async function saveRegisterLocksBatch(
+  input: BatchRegisterLockInput,
+): Promise<BatchRegisterLockResult> {
+  try {
+    const dedupedMap = new Map<
+      string,
+      { registerCode: string; periodKey: string; closingDate?: string }
+    >();
+    for (const item of input.items) {
+      const code = String(item.registerCode || "").trim();
+      const periodKey = String(item.periodKey || "").trim();
+      if (!code || !periodKey) continue;
+      dedupedMap.set(`${code}::${periodKey}`, {
+        registerCode: code,
+        periodKey,
+        closingDate: item.closingDate,
+      });
+    }
+
+    const items = Array.from(dedupedMap.values());
+    if (items.length === 0) {
+      return { lockedCount: 0, skippedCount: 0, lockedPeriods: [] };
+    }
+
+    const registerCodes = Array.from(new Set(items.map((i) => i.registerCode)));
+    const periodKeys = Array.from(new Set(items.map((i) => i.periodKey)));
+
+    const existingRows = await db
+      .select()
+      .from(registerLocks)
+      .where(
+        and(
+          inArray(registerLocks.registerCode, registerCodes),
+          inArray(registerLocks.periodKey, periodKeys),
+        ),
+      );
+
+    const existingByKey = new Map(
+      existingRows.map((row) => [`${row.registerCode}::${row.periodKey}`, row]),
+    );
+
+    const skipAlreadyLocked = input.skipAlreadyLocked !== false;
+    const now = new Date();
+    const formattedLeftPangkatNip = input.leftSignerPangkatNip
+      ? formatLockPangkatNip(input.leftSignerPangkatNip)
+      : null;
+    const formattedRightPangkatNip = input.rightSignerPangkatNip
+      ? formatLockPangkatNip(input.rightSignerPangkatNip)
+      : null;
+
+    const toInsert: Array<typeof registerLocks.$inferInsert> = [];
+    const toUpdate: Array<{ id: number; closingDate: string | null }> = [];
+    const lockedPeriods: Array<{ registerCode: string; periodKey: string }> = [];
+    let skippedCount = 0;
+
+    for (const item of items) {
+      const key = `${item.registerCode}::${item.periodKey}`;
+      const existing = existingByKey.get(key);
+
+      if (existing && existing.isLocked === 1 && skipAlreadyLocked) {
+        skippedCount += 1;
+        continue;
+      }
+
+      if (existing) {
+        toUpdate.push({
+          id: existing.id,
+          closingDate: item.closingDate || existing.closingDate || null,
+        });
+      } else {
+        toInsert.push({
+          registerCode: item.registerCode,
+          periodKey: item.periodKey,
+          isLocked: 1,
+          leftSignerTitle: input.leftSignerTitle || null,
+          leftSignerName: input.leftSignerName || null,
+          leftSignerPangkatNip: formattedLeftPangkatNip,
+          rightSignerTitle: input.rightSignerTitle || null,
+          rightSignerName: input.rightSignerName || null,
+          rightSignerPangkatNip: formattedRightPangkatNip,
+          signatureAlignment: input.signatureAlignment || "split",
+          tempatDokumen: input.tempatDokumen || null,
+          closingDate: item.closingDate || null,
+          lockedBy: input.lockedBy || null,
+          lockedAt: now,
+          updatedAt: now,
+        });
+      }
+
+      lockedPeriods.push({
+        registerCode: item.registerCode,
+        periodKey: item.periodKey,
+      });
+    }
+
+    if (toInsert.length > 0) {
+      await db.insert(registerLocks).values(toInsert);
+    }
+
+    for (const upd of toUpdate) {
+      await db
+        .update(registerLocks)
+        .set({
+          isLocked: 1,
+          leftSignerTitle: input.leftSignerTitle || null,
+          leftSignerName: input.leftSignerName || null,
+          leftSignerPangkatNip: formattedLeftPangkatNip,
+          rightSignerTitle: input.rightSignerTitle || null,
+          rightSignerName: input.rightSignerName || null,
+          rightSignerPangkatNip: formattedRightPangkatNip,
+          signatureAlignment: input.signatureAlignment || "split",
+          tempatDokumen: input.tempatDokumen || null,
+          closingDate: upd.closingDate,
+          lockedBy: input.lockedBy || null,
+          lockedAt: now,
+          updatedAt: now,
+        })
+        .where(eq(registerLocks.id, upd.id));
+    }
+
+    return {
+      lockedCount: lockedPeriods.length,
+      skippedCount,
+      lockedPeriods,
+    };
+  } catch (error) {
+    console.error("Failed to batch save register locks:", error);
+    throw new Error(`Failed to batch save register locks: ${error}`);
   }
 }
 

@@ -5,6 +5,8 @@ import {
   getClosingDateForPeriod,
   extractDateFromEntry,
   filterEntriesByPeriod,
+  getMonthsBeforeCurrentMonth,
+  isMonthBeforeCurrentMonth,
 } from "./date-utils.js";
 import { RegisterEntryRow, AppSettings } from "../types.js";
 
@@ -146,6 +148,34 @@ describe("date-utils", () => {
         "all"
       );
       expect(filtered).toEqual([]);
+    });
+  });
+
+  describe("getMonthsBeforeCurrentMonth & isMonthBeforeCurrentMonth", () => {
+    const nov2026 = new Date(2026, 10, 17); // November 17, 2026
+    const jan2026 = new Date(2026, 0, 5); // January 5, 2026
+
+    it("returns months 1..10 when selectedYear is current year (Nov 2026)", () => {
+      expect(getMonthsBeforeCurrentMonth(2026, nov2026)).toEqual([
+        1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
+      ]);
+      expect(isMonthBeforeCurrentMonth(2026, 10, nov2026)).toBe(true);
+      expect(isMonthBeforeCurrentMonth(2026, 11, nov2026)).toBe(false);
+      expect(isMonthBeforeCurrentMonth(2026, 12, nov2026)).toBe(false);
+    });
+
+    it("returns all 12 months when selectedYear is before reference year", () => {
+      expect(getMonthsBeforeCurrentMonth(2025, nov2026)).toEqual([
+        1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12,
+      ]);
+      expect(isMonthBeforeCurrentMonth(2025, 12, nov2026)).toBe(true);
+    });
+
+    it("returns empty array when selectedYear is after reference year or in January of current year", () => {
+      expect(getMonthsBeforeCurrentMonth(2027, nov2026)).toEqual([]);
+      expect(getMonthsBeforeCurrentMonth(2026, jan2026)).toEqual([]);
+      expect(isMonthBeforeCurrentMonth(2027, 1, nov2026)).toBe(false);
+      expect(isMonthBeforeCurrentMonth(2026, 1, jan2026)).toBe(false);
     });
   });
 });

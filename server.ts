@@ -26,6 +26,7 @@ import {
   getRegisterLocks,
   getRegisterLock,
   saveRegisterLock,
+  saveRegisterLocksBatch,
   unlockRegister,
   getRegisterRekapitulasi,
   saveRegisterRekapitulasi,
@@ -491,6 +492,69 @@ async function startServer() {
       console.error("Error unlocking register:", error);
       res.status(500).json({
         error: getErrorMessage(error, "Failed to unlock register"),
+      });
+    }
+  });
+
+  app.post("/api/register-locks/batch", async (req, res) => {
+    try {
+      const {
+        items,
+        leftSignerTitle,
+        leftSignerName,
+        leftSignerPangkatNip,
+        rightSignerTitle,
+        rightSignerName,
+        rightSignerPangkatNip,
+        signatureAlignment,
+        tempatDokumen,
+        lockedBy,
+        skipAlreadyLocked,
+      } = req.body;
+
+      if (!Array.isArray(items) || items.length === 0) {
+        return res.status(400).json({
+          error: "Daftar periode (items) wajib diisi dan tidak boleh kosong.",
+        });
+      }
+
+      const validItems = items.filter(
+        (item) =>
+          item &&
+          typeof item.registerCode === "string" &&
+          item.registerCode.trim() !== "" &&
+          typeof item.periodKey === "string" &&
+          item.periodKey.trim() !== "",
+      );
+
+      if (validItems.length === 0) {
+        return res.status(400).json({
+          error: "Setiap item periode wajib memiliki registerCode dan periodKey.",
+        });
+      }
+
+      const result = await saveRegisterLocksBatch({
+        items: validItems,
+        leftSignerTitle,
+        leftSignerName,
+        leftSignerPangkatNip,
+        rightSignerTitle,
+        rightSignerName,
+        rightSignerPangkatNip,
+        signatureAlignment,
+        tempatDokumen,
+        lockedBy,
+        skipAlreadyLocked,
+      });
+
+      res.status(200).json({
+        success: true,
+        ...result,
+      });
+    } catch (error: unknown) {
+      console.error("Error batch saving register locks:", error);
+      res.status(500).json({
+        error: getErrorMessage(error, "Failed to batch save register locks"),
       });
     }
   });

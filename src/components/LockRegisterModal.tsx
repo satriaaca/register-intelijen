@@ -3,6 +3,7 @@ import { AppSettings, RegisterDefinition, RegisterLock, Officer } from "../types
 import { DEFAULT_SETTINGS } from "../lib/constants.js";
 import { Lock, Unlock, ShieldAlert, Check, X, Info, UserCheck } from "lucide-react";
 import { authFetch } from "../lib/api.js";
+import { formatLockPangkatNip } from "../lib/lock-utils.js";
 
 interface LockRegisterModalProps {
   isOpen: boolean;
@@ -20,15 +21,6 @@ interface LockRegisterModalProps {
   officers?: Officer[];
   onLockUpdated?: () => void;
   onLockSaved?: (updatedLock: RegisterLock | null) => void;
-}
-
-function formatLockPangkatNip(value: string): string {
-  return value
-    .replace(/\s*\/\s*(?=NIP\b)/gi, " ")
-    .replace(/\//g, "")
-    .replace(/\s+/g, " ")
-    .trim()
-    .toUpperCase();
 }
 
 export const LockRegisterModal: React.FC<LockRegisterModalProps> = ({

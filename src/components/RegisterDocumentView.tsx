@@ -3,6 +3,7 @@ import {
   AlertCircle,
   AlertTriangle,
   Calendar,
+  CalendarClock,
   CheckCircle2,
   Clock,
   Download,
@@ -48,7 +49,9 @@ import {
   formatDateIndonesian,
   filterEntriesByPeriod,
   getClosingDateForPeriod,
+  getMonthsBeforeCurrentMonth,
 } from "../lib/date-utils.js";
+import { formatMonthSummaryId } from "../lib/lock-utils.js";
 
 import {
   detectRin3Category,
@@ -65,6 +68,7 @@ import { PdfPreviewModal } from "./PdfPreviewModal.js";
 import { StorageCodesModal } from "./StorageCodesModal.js";
 import { LockRegisterModal } from "./LockRegisterModal.js";
 import { BatchMonthPdfModal } from "./BatchMonthPdfModal.js";
+import { BatchLockRegisterModal, type BatchLockSummary } from "./BatchLockRegisterModal.js";
 
 interface RegisterDocumentViewProps {
   register: RegisterDefinition;
@@ -220,6 +224,8 @@ export const RegisterDocumentView: React.FC<RegisterDocumentViewProps> = ({
   // State Fitur Lock Register (Kunci Penandatangan)
   const [currentLock, setCurrentLock] = useState<RegisterLock | null>(null);
   const [isLockModalOpen, setIsLockModalOpen] = useState(false);
+  const [isBatchLockModalOpen, setIsBatchLockModalOpen] = useState(false);
+  const [lockNotice, setLockNotice] = useState<string | null>(null);
   const [isLoadingLock, setIsLoadingLock] = useState(false);
 
   const [isEditingClosingDate, setIsEditingClosingDate] = useState(false);
@@ -1329,6 +1335,32 @@ export const RegisterDocumentView: React.FC<RegisterDocumentViewProps> = ({
             )}
           </button>
 
+          {/* Tombol Kunci Semua Bulan Sebelum Bulan Berjalan */}
+          {(() => {
+            const pastMonths = getMonthsBeforeCurrentMonth(selectedYear);
+            const pastRangeShort = formatMonthSummaryId(pastMonths, true);
+            return (
+              <button
+                id="btn-lock-past-months"
+                type="button"
+                onClick={() => setIsBatchLockModalOpen(true)}
+                title={
+                  pastMonths.length > 0
+                    ? `Kunci sekaligus bulan sebelum bulan berjalan (${formatMonthSummaryId(pastMonths)} ${selectedYear})`
+                    : `Lihat status kunci bulan sebelum bulan berjalan untuk tahun ${selectedYear}`
+                }
+                className="inline-flex cursor-pointer items-center gap-1.5 rounded border border-amber-300 bg-amber-50 px-2.5 py-1.5 text-xs font-bold text-amber-950 shadow-sm transition hover:bg-amber-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-600"
+              >
+                <CalendarClock className="h-3.5 w-3.5 text-amber-700 shrink-0" />
+                <span>
+                  {pastRangeShort
+                    ? `Kunci Bulan Lalu (${pastRangeShort})`
+                    : "Kunci Bulan Lalu"}
+                </span>
+              </button>
+            );
+          })()}
+
           <button
             id="btn-import-csv"
             type="button"
@@ -1496,6 +1528,24 @@ export const RegisterDocumentView: React.FC<RegisterDocumentViewProps> = ({
               );
             })}
           </div>
+        </div>
+      )}
+
+      {/* Notifikasi Hasil Penguncian Massal */}
+      {lockNotice && (
+        <div className="flex items-center justify-between gap-3 rounded-lg border border-emerald-300 bg-emerald-50 p-3 text-xs text-emerald-950 shadow-xs">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-700" />
+            <span className="font-medium">{lockNotice}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setLockNotice(null)}
+            aria-label="Tutup notifikasi penguncian"
+            className="cursor-pointer rounded p-0.5 text-emerald-700 hover:bg-emerald-100"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
         </div>
       )}
 
@@ -2597,6 +2647,28 @@ export const RegisterDocumentView: React.FC<RegisterDocumentViewProps> = ({
         officers={officers}
         onLockSaved={(updatedLock) => {
           setCurrentLock(updatedLock);
+        }}
+      />
+
+      <BatchLockRegisterModal
+        isOpen={isBatchLockModalOpen}
+        onClose={() => setIsBatchLockModalOpen(false)}
+        register={register}
+        currentSettings={settings}
+        selectedYear={selectedYear}
+        officers={officers}
+        onBatchLocked={(summary: BatchLockSummary) => {
+          void loadRegisterLock();
+          const rangeText = formatMonthSummaryId(summary.months);
+          const scopeText =
+            summary.scope === "all" ? "seluruh 22 register" : register.code;
+          const skippedText =
+            summary.skippedCount > 0
+              ? ` (${summary.skippedCount} periode yang sudah terkunci dilewati)`
+              : "";
+          setLockNotice(
+            `Berhasil mengunci ${summary.lockedCount} periode pada ${scopeText} untuk ${rangeText} ${selectedYear}${skippedText}.`,
+          );
         }}
       />
     </div>
